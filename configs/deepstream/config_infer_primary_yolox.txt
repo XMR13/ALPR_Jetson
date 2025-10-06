@@ -1,0 +1,13 @@
+ [property]
+ onnx-file=models/detector/yolox_s.onnx
+ model-engine-file=models/detector/yolox_s_fp16.engine
+ network-mode=2
+ num-detected-classes=1
+ input-dims=3;640;640;1
+ uff-input-order=0
+ interval=0
+ 
+ [class-attrs-all]
+ pre-cluster-threshold=0.20
+ nms-iou-threshold=0.45
+

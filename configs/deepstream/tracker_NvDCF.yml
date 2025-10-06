@@ -1,0 +1,6 @@
+%YAML 1.2
+---
+useUniqueID: 1
+minTargetSize: 12
+maxShadowTrackingAge: 90
+

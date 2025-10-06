@@ -1,0 +1,13 @@
+version: "3.9"
+services:
+  alpr-deepstream:
+    image: nvcr.io/nvidia/deepstream:6.4-triton-multiarch
+    runtime: nvidia
+    command: ["/bin/true"] # placeholder
+  alpr-ocr:
+    image: python:3.10-slim
+    command: ["python","-c","print('ocr stub')"]
+  alpr-api:
+    image: python:3.10-slim
+    command: ["python","-c","print('api stub')"]
+

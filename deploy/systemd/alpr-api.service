@@ -1,0 +1,14 @@
+[Unit]
+Description=ALPR API Service (stub)
+After=network.target
+
+[Service]
+User=alpr
+Restart=always
+RestartSec=2
+WorkingDirectory=/opt/alpr/src/api_server
+ExecStart=/usr/bin/python3 server.py
+
+[Install]
+WantedBy=multi-user.target
+

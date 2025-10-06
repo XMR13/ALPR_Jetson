@@ -1,0 +1,2 @@
+"""OCR microservice package (placeholder)."""
+
