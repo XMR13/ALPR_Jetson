@@ -16,4 +16,6 @@ data/
 #individual files
 AGENTS.md
 plan.md
+uv.lock
+pyproject.toml
 
