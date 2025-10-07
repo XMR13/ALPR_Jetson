@@ -43,6 +43,8 @@ Each session file should contain the following sections:
 3) Before ending → update Plan Snapshot statuses and Next Actions.
 4) Ensure Sync Check passes (plan alignment + repo state verified).
 
+Note: Commit and testing policies are documented in `AGENTS.md`.
+
 ## References
 - Plan: `plan.md`
 - Key code: `src/deepstream_app/`, `src/ocr_service/`, `src/api_server/`

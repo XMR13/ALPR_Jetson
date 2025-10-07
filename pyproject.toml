@@ -1,13 +1,18 @@
 [project]
 name = "alpr-jetson"
 version = "0.1.0"
-description = "Add your description here"
+description = "ALPR pipeline orchestration for Jetson (DeepStream, OCR, API)"
 readme = "README.md"
 requires-python = ">=3.8"
-dependencies = [
-    "matplotlib>=3.7.5",
-    "numpy>=1.24.4",
-    "pandas>=2.0.3",
-    "seaborn>=0.13.2",
-    "tqdm>=4.67.1",
-]
+dependencies = []
+
+[project.scripts]
+alpr-jetson = "alpr_jetson.__main__:main"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
