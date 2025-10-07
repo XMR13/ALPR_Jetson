@@ -1,6 +1,6 @@
  [source0]
  enable=1
- uri=file://configs/camera/cam01.rtsp.txt
+ uri=rtsp://admin:cctv123456@172.16.169.2
  
  [streammux]
  batch-size=1
@@ -20,4 +20,3 @@
  
  [sink0]
  type=fakesink
-

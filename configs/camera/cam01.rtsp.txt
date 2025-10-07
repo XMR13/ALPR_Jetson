@@ -1,0 +1,16 @@
+# RTSP Camera Placeholder (cam01)
+# Fill in RTSP_URI with your actual credentials/host/path.
+# Notes:
+# - RECONNECT_MAX_RETRIES=0 means retry forever
+# - LATENCY_MS is GStreamer rtspsrc latency; tune per jitter
+# - DECODE_CAPS helps DeepStream/GStreamer negotiate H264/H265
+
+RTSP_URI=rtsp://admin:cctv123456@172.16.169.2
+RECONNECT_MAX_RETRIES=0
+RECONNECT_INTERVAL_MS=2000
+LATENCY_MS=200
+DROP_ON_LATENCY=true
+
+# Choose one, comment the other
+DECODE_CAPS=video/x-h264, stream-format=(string)byte-stream, alignment=(string)au
+# DECODE_CAPS=video/x-h265, stream-format=(string)byte-stream, alignment=(string)au
