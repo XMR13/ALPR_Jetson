@@ -20,7 +20,7 @@ Each session file should contain the following sections:
 
 3) Plan Snapshot (from `plan.md` Section 5)
 - Mirror the plan’s structure (Week/Day items) and assign a status to each relevant bullet.
-- Recommended statuses: `completed`, `in_progress`, `pending`, `blocked`.
+- Recommended statuses: `checked` (verified done), `in_progress`, `open`, `blocked`.
 - Keep wording identical to the plan; add short parenthetical notes if needed.
 
 4) Decisions & Blockers
@@ -35,7 +35,7 @@ Each session file should contain the following sections:
 ## Sync Rules
 - Source of truth for tasks is `plan.md` Section 5. If the plan changes, reflect updates in subsequent session files.
 - Do not rewrite past sessions unless correcting factual errors; instead, add a note in the latest session.
-- Keep statuses conservative unless verified (e.g., prefer `pending` over guessing `completed`).
+- Default behavior: explicitly mark verified items as `checked`. Use `open` for not-started, `in_progress` for ongoing, and `blocked` for external dependencies.
 
 ## Quick Workflow
 1) Start session → create new `YYYY-MM-DD_session-N.md`.
@@ -47,4 +47,3 @@ Each session file should contain the following sections:
 - Plan: `plan.md`
 - Key code: `src/deepstream_app/`, `src/ocr_service/`, `src/api_server/`
 - Key configs: `configs/deepstream/`, `configs/ocr/`
-
