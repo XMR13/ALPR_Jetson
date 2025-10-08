@@ -13,7 +13,6 @@ wheels/
 #jangan masukkan folder image
 Image/
 data/
-venv/
 
 #individual files
 AGENTS.md
