@@ -14,9 +14,10 @@ Each session file should contain the following sections:
 - One-paragraph summary of what was done and key outcomes.
 
 2) Changes
-- Added: list of new files/dirs created in this session (workspace-relative paths).
+- Added: list of new files/dirs created in this session (workspace-relative paths). 
 - Modified: list of files updated in this session.
 - Deleted: list of files removed in this session.
+- for each added and modified add a short summary of what they do
 
 3) Plan Snapshot (from `plan.md` Section 5)
 - Mirror the plan’s structure (Week/Day items) and assign a status to each relevant bullet.

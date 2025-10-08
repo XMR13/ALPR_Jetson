@@ -1,0 +1,11 @@
+regex: "^[A-Z]{1,2}\\s?\\d{1,4}\\s?[A-Z]{0,3}$"
+allowed_prefix: [A, B, D, F, E, Z, T]
+ambiguous_pairs:
+  - ["O", "0", 0.2]
+  - ["I", "1", 0.2]
+  - ["S", "5", 0.3]
+  - ["B", "8", 0.3]
+  - ["G", "6", 0.3]
+majority_vote_window: 8
+min_plate_height_px: 28
+

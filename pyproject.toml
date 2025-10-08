@@ -4,7 +4,9 @@ version = "0.1.0"
 description = "ALPR pipeline orchestration for Jetson (DeepStream, OCR, API)"
 readme = "README.md"
 requires-python = ">=3.8"
-dependencies = []
+dependencies = [
+    "pytest>=8.3.5",
+]
 
 [project.scripts]
 alpr-jetson = "alpr_jetson.__main__:main"

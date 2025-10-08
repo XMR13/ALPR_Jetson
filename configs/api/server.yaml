@@ -1,0 +1,25 @@
+# FastAPI server configuration for ALPR API
+# Jetson-specific notes: keep defaults lightweight; expose minimal CORS in early stages.
+
+server:
+  host: 0.0.0.0
+  port: 8080
+  log_level: info
+
+cors:
+  allow_origins: ["*"]
+  allow_methods: ["GET", "POST", "OPTIONS"]
+  allow_headers: ["*"]
+
+auth:
+  enabled: false
+  token: "CHANGE_ME"
+
+rate_limit:
+  enabled: false
+  requests_per_minute: 600
+
+storage:
+  events_db: "export/events.sqlite"
+  snapshots_dir: "export/snapshots"
+
