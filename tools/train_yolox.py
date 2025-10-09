@@ -35,6 +35,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--epochs", type=int, default=50, help="Max epochs")
     p.add_argument("--fp16", action="store_true", help="Enable mixed precision")
     p.add_argument("--devices", type=int, default=1, help="Number of GPUs")
+    p.add_argument("--ckpt", default="", help="Path to pretrained checkpoint (e.g., YOLOX_S.pth)")
+    p.add_argument("--expn", default="plate_yolox_s", help="Experiment name for outputs/")
+    p.add_argument("--seed", type=int, default=42, help="Training seed for reproducibility")
+    p.add_argument("--cache", action="store_true", help="Cache images to RAM for faster IO (if enough memory)")
+    p.add_argument("--no-aug-epochs", type=int, default=15, help="No-augmentation tail epochs (stability phase)")
     return p
 
 
@@ -51,6 +56,9 @@ def main(argv: List[str] | None = None) -> None:
 
     # Allow overriding epochs via env recognized by Exp
     env["YOLOX_MAX_EPOCH"] = str(args.epochs)
+    env["YOLOX_NO_AUG"] = str(args.no_aug_epochs)
+    if args.ckpt:
+        env["YOLOX_PRETRAIN"] = str(args.ckpt)
 
     cmd = [
         sys.executable,
@@ -62,10 +70,18 @@ def main(argv: List[str] | None = None) -> None:
         str(args.devices),
         "-b",
         str(args.batch),
-        "-o",
+        "--expn",
+        str(args.expn),
+        "-o",  # occupy GPU memory to prevent fragmentation (YOLOX convention)
     ]
     if args.fp16:
         cmd.append("--fp16")
+    if args.ckpt:
+        cmd.extend(["-c", str(args.ckpt)])
+    if args.cache:
+        cmd.append("--cache")
+    if args.seed is not None:
+        cmd.extend(["--seed", str(args.seed)])
 
     print("Launching:", " ".join(cmd))
     try:
@@ -78,4 +94,3 @@ def main(argv: List[str] | None = None) -> None:
 
 if __name__ == "__main__":
     main()
-

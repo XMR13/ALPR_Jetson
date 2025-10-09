@@ -40,18 +40,25 @@ class Exp(_BaseExp):
         self.num_classes = 1
 
         # Training schedule
-        self.max_epoch = 50
+        # For small/specialized datasets, slightly longer schedule + no-aug phase
+        # tends to improve stability and AP, especially on small targets.
+        self.max_epoch = int(os.getenv("YOLOX_MAX_EPOCH", "80"))
+        self.no_aug_epochs = int(os.getenv("YOLOX_NO_AUG", "15"))
         self.warmup_epochs = 3
-        self.basic_lr_per_img = 0.01 / 64.0
+        self.basic_lr_per_img = 0.01 / 64.0  # scaled by batch size per GPU in YOLOX
         self.eval_interval = 1
         self.print_interval = 50
         self.data_num_workers = 4
 
-        # Augmentations
-        self.mosaic_prob = 0.5
-        self.mixup_prob = 0.1
+        # Augmentations (plates are small; keep mosaic, reduce mixup)
+        self.random_size = (14, 26)  # multi-scale: 448..832 when stride=32
+        self.mosaic_prob = 0.7
+        self.mixup_prob = 0.05
         self.hsv_prob = 1.0
         self.flip_prob = 0.5
+        self.enable_mixup = True
+        # Enable L1 in the final stage to refine localization
+        self.use_l1 = True
 
         # Dataset paths (can be overridden via env)
         data_dir = os.getenv("YOLOX_DATA_DIR", "data/yolox/cam01")
@@ -69,3 +76,6 @@ class Exp(_BaseExp):
         # Run name
         self.exp_name = os.path.split(os.path.realpath(__file__))[1].split(".")[0]
 
+        # Optional: allow specifying pre-trained COCO weights via env for fine-tuning
+        # Typical value: YOLOX_S.pth from official releases
+        self.pretrained = os.getenv("YOLOX_PRETRAIN", "")
