@@ -1,5 +1,7 @@
  [source0]
  enable=1
+ # Hint: you can externalize the RTSP parameters to a file and point DeepStream wrappers to it
+ # e.g., uri=file://configs/camera/cam01.rtsp.txt (if supported by your launcher)
  uri=rtsp://admin:cctv123456@172.16.169.2
  
  [streammux]
