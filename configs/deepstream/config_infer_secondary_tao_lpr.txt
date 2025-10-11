@@ -1,0 +1,19 @@
+[property]
+# TAO LPRNet (Recognizer as SGIE)
+# This config is a placeholder. For ETLT, DeepStream usually needs a TAO-specific parser
+# or uses the TAO-provided config template. Fill keys per your TAO LPRNet version.
+
+# Example when using engine directly:
+# model-engine-file=models/lpr/lpr_fp16.engine
+is-classifier=1
+network-mode=2
+output-blob-names=output
+labelfile-path=configs/deepstream/labels_lpr.txt   # optional, for charset mapping if needed
+
+[secondary-gie]
+enable=1
+operate-on-gie-id=1        # PGIE unique-id
+operate-on-class-ids=0     # license_plate class id from PGIE
+input-object-min-width=20
+input-object-min-height=10
+

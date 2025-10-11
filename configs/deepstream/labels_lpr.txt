@@ -1,0 +1,4 @@
+# Placeholder charset or class labels for LPRNet (if required by your parser)
+# Many LPR models do not use a static label file; the parser maps logits to chars.
+# Keep as documentation stub.
+

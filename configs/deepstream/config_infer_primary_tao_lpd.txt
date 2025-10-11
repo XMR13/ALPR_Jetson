@@ -1,0 +1,21 @@
+[property]
+# TAO LPDNet (Detector) — fill actual paths and keys
+# Use either a TensorRT engine:
+# model-engine-file=models/lpd/lpd_fp16.engine
+# Or TAO ETLT model (requires DS with ETLT support and a key):
+# tlt-encoded-model=models/lpd/lpd.etlt
+# tlt-model-key=YOUR_TAO_KEY
+
+labelfile-path=configs/deepstream/labels_lpd.txt
+num-detected-classes=1
+network-mode=2            # 0:FP32, 1:INT8, 2:FP16
+interval=0
+
+# If using ONNX/TRT directly (non-ETLT):
+# onnx-file=models/lpd/lpd.onnx
+# input-dims=3;640;640;1
+
+[class-attrs-all]
+pre-cluster-threshold=0.25
+nms-iou-threshold=0.45
+
