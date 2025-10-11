@@ -1,0 +1,27 @@
+ALPR Jetson — Data Prep Audit (2025-10-11)
+
+Source (COCO → crops → TAO):
+
+- Crops generated from COCO
+  - data/processed/ocr_crops/train: 1171 files
+  - data/processed/ocr_crops/val  : 280 files
+
+- TAO LPR dataset (crops + labels.txt)
+  - data/tao/lpr/train/images: 1171 files
+  - data/tao/lpr/train/labels.txt: 1171 lines
+  - data/tao/lpr/val/images  : 280 files
+  - data/tao/lpr/val/labels.txt  : 280 lines
+
+- TAO LPD dataset (KITTI-style labels + list.txt)
+  - data/tao/lpd/train/images: 1170 files
+  - data/tao/lpd/train/labels: 1170 txt files
+  - data/tao/lpd/train/list.txt: 1170 lines
+  - data/tao/lpd/val/images  : 279 files
+  - data/tao/lpd/val/labels  : 279 txt files
+  - data/tao/lpd/val/list.txt: 279 lines
+
+Notes
+- LPR train/val counts match between images and labels.txt lines.
+- LPD train/val counts match across images, labels, and list.txt lines.
+- Proceed to TAO training using these directories.
+
