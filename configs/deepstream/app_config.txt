@@ -1,8 +1,11 @@
  [source0]
  enable=1
- # Hint: you can externalize the RTSP parameters to a file and point DeepStream wrappers to it
- # e.g., uri=file://configs/camera/cam01.rtsp.txt (if supported by your launcher)
+ # RTSP URI source requires type=4 for deepstream-app
+ type=4
  uri=rtsp://admin:cctv123456@172.16.169.2
+ latency=200
+ # Optional but recommended on Jetson
+ cudadec-memtype=0
  
  [streammux]
  batch-size=1
@@ -17,7 +20,7 @@
  [tracker]
  tracker-width=960
  tracker-height=544
- yaml-file=configs/deepstream/tracker_NvDCF.yml
+ ll-config-file=configs/deepstream/tracker_NvDCF.yml
  ll-lib-file=libnvds_nvmultiobjecttracker.so
  
  [sink0]

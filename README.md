@@ -1,6 +1,6 @@
 # ALPR Jetson — YOLOv9 Detector
 
-Repo ini sekarang menggunakan YOLOv9 (TensorRT) sebagai detektor plat utama. TAO telah dihapus dari rencana dan artefak terkait dibersihkan.
+Repo ini menggunakan YOLOv9 (TensorRT) sebagai detektor plat utama.
 
 Penempatan artefak model:
 - ONNX: `models/detector/yolov9-s.onnx`
@@ -9,7 +9,7 @@ Penempatan artefak model:
 
 DeepStream:
 - Konfigurasi default mengarah ke `configs/deepstream/config_infer_primary_yolov9.txt`. Jalankan smoke test:
-  - `python -m alpr_jetson.ds-smoke --config configs/deepstream/app_config.txt`
+  - `python -m alpr_jetson ds-smoke --config configs/deepstream/app_config.txt`
   - atau `bash tools/deepstream_smoke.sh configs/deepstream/app_config.txt`
 
 Pelatihan & ekspor YOLOv9 dilakukan di lingkungan eksternal Anda. Lihat `docs/TRAINING_NOTES.md` untuk catatan ekspor ONNX → TensorRT.
