@@ -11,7 +11,7 @@
  live-source=1
  
  [primary-gie]
- config-file=configs/deepstream/config_infer_primary_yolox.txt
+ config-file=configs/deepstream/config_infer_primary_yolov9.txt
  unique-id=1
  
  [tracker]

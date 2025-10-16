@@ -13,6 +13,7 @@ wheels/
 #jangan masukkan folder image
 Image/
 data/
+progress/
 
 #individual files
 AGENTS.md
