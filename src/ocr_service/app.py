@@ -33,6 +33,8 @@ class AppConfig:
     input_height: int = 32
     mean: float = 0.5
     std: float = 0.5
+    channels: int = 1
+    logits_layout: str = "NTC"
 
 
 class OCRRequest(BaseModel):  # type: ignore[misc]
@@ -52,7 +54,9 @@ def create_app(cfg: AppConfig = AppConfig()):  # -> "FastAPI | None":
             input_height=cfg.input_height,
             mean=cfg.mean,
             std=cfg.std,
+            channels=cfg.channels,
         ),
+        logits_layout=cfg.logits_layout,
     )
 
     @app.post("/v1/ocr")
@@ -78,4 +82,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

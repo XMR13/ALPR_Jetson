@@ -45,6 +45,8 @@ OCR (CRNN/Paddle-style) — Preproc & Service
 - Post-processing: `src/ocr_service/postprocess.py` (regex-validasi, perbaikan karakter ambigu, majority vote).
 - OCR TensorRT wrapper: `src/ocr_service/trt_infer.py` (graceful fallback jika TensorRT belum tersedia).
 - FastAPI microservice stub: `src/ocr_service/app.py` (opsional; butuh FastAPI terpasang).
+- Pelatihan & ekspor OCR: lihat `docs/OCR_MODEL.md` untuk panduan PaddleOCR → ONNX → TensorRT, termasuk target akurasi dan layout model.
+- Evaluasi akurasi OCR: `tools/eval_ocr.py --engine ... --charset ... --crops ... --labels ...` menghitung exact-match dan CER.
 
 Contoh pakai OCR (lokal, jika FastAPI terpasang):
 ```bash
@@ -63,3 +65,27 @@ svc = OCRService(engine_path="models/ocr/ppo_crnn_fp16.engine",
 img = cv2.imread("data/labeled/ocr_crops/example.jpg")
 print(svc.infer_batch([img]))
 ```
+
+CLI cepat untuk uji OCR (butuh engine + charset):
+
+```bash
+python -m alpr_jetson ocr-infer \
+  --engine models/ocr/ppo_crnn_fp16.engine \
+  --charset models/ocr/charset.txt \
+  --source data/labeled/ocr_crops/ \
+  --output export/ocr_preds.csv
+```
+
+Catatan lebih rinci untuk ONNX → TensorRT OCR ada di `docs/OCR_NOTES.md`.
+
+
+API (FastAPI) — Stub Endpoints
+- Server skeleton: `src/api_server/server.py` (import-safe tanpa FastAPI). Saat FastAPI tersedia, exposes:
+  - `GET /healthz`, `GET /metrics`
+  - `GET /v1/stream/info`, `POST /v1/hooks`, `GET /v1/events`, `WS /v1/ws`
+  - Kontrak mengikuti `plan.md §9`.
+
+
+Temporal Voting per Track
+- Modul agregasi per-track: `src/pipeline/track_aggregator.py` — melakukan majority voting dan emisi event stabil sesuai skema di `plan.md §9`.
+- Lihat uji: `tests/pipeline/test_track_aggregator.py`.
