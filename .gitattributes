@@ -1,0 +1,5 @@
+*.ipynb linguist-vendored
+docs/** linguist-documentation
+third_party/** linguist-vendored
+# Add any custom overrides you need:
+# *.tpp linguist-language=C++
