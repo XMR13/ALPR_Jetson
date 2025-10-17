@@ -157,6 +157,18 @@ class TRTModule:
             else:
                 self.output_binding_indices.append(i)
 
+        # identify tensor input binding (exclude shape bindings)
+        tensor_inputs = [i for i in self.input_binding_indices if not self.engine.is_shape_binding(i)]
+        if len(tensor_inputs) != 1:
+            raise RuntimeError(
+                f"Expected exactly one tensor input, found {len(tensor_inputs)}. "
+                "Dynamic batching or multiple inputs are not supported in this helper."
+            )
+        self.data_input_idx = tensor_inputs[0]
+        self._input_hw = None  # type: ignore[assignment]
+        self._input_layout = None
+        self._input_dtype = trt_dtype_to_np(self.engine.get_binding_dtype(self.data_input_idx))
+
         if print_plugins:
             _print_registered_plugins()
 
@@ -265,7 +277,7 @@ def _squeeze01(x):
     # remove a leading batch dim if present
     return x[0] if (x.ndim >= 2 and x.shape[0] == 1) else x
 
-def decode_trt_detections(outputs, img0_shape, input_hw, ratio_pad, conf_thres=0.5, names=None):
+def decode_trt_detections(outputs, img0_shape, input_hw, ratio_pad, conf_thres=0.5, iou_thres=0.45, names=None):
     """
     Supports two formats:
       A) Raw YOLO: single tensor [N, 5+C]  -> use postprocess_yolo()
@@ -277,7 +289,7 @@ def decode_trt_detections(outputs, img0_shape, input_hw, ratio_pad, conf_thres=0
     if len(only) == 1 and only[0].ndim >= 2 and only[0].shape[-1] >= 6:
         out = only[0]
         return postprocess_yolo(
-            out, img0_shape, input_hw, ratio_pad, conf_thres=conf_thres, iou_thres=0.45
+            out, img0_shape, input_hw, ratio_pad, conf_thres=conf_thres, iou_thres=iou_thres
         )
 
     # --- detect format B: EfficientNMS-style ---
@@ -334,6 +346,53 @@ def decode_trt_detections(outputs, img0_shape, input_hw, ratio_pad, conf_thres=0
     dets = [(boxes[i], float(scores[i]), int(classes[i])) for i in range(boxes.shape[0])]
     return dets
 
+def _resolve_input_spec(trt_model):
+    if trt_model._input_hw is None or trt_model._input_layout is None:
+        raw_shape = trt_model.engine.get_binding_shape(trt_model.data_input_idx)
+        if raw_shape[-1] == 3 and (len(raw_shape) >= 3) and (raw_shape[-2] > 0 or raw_shape[-3] > 0):
+            H = raw_shape[-3] if raw_shape[-3] > 0 else 640
+            W = raw_shape[-2] if raw_shape[-2] > 0 else 640
+            layout = "NHWC"
+        else:
+            H = raw_shape[-2] if raw_shape[-2] > 0 else 640
+            W = raw_shape[-1] if raw_shape[-1] > 0 else 640
+            layout = "NCHW"
+        trt_model._input_hw = (H, W)
+        trt_model._input_layout = layout
+    return trt_model._input_hw, trt_model._input_layout
+
+def _prepare_image(trt_model, img0):
+    input_hw, layout = _resolve_input_spec(trt_model)
+    H, W = input_hw
+    img, r, (dw, dh) = letterbox(img0, (H, W), auto=False, scaleFill=False, scaleup=True)
+    inp = img.astype(np.float32) / 255.0
+    if layout == "NCHW":
+        inp = inp.transpose(2, 0, 1)[None, ...]
+    else:
+        inp = inp[None, ...]
+    inp = inp.astype(trt_model._input_dtype, copy=False)
+    return trt_model.data_input_idx, inp, input_hw, (r, (dw, dh))
+
+def load_engine(engine_path, print_plugins=False):
+    return TRTModule(engine_path, print_plugins=print_plugins)
+
+def infer_image(trt_model, image_path, conf=0.5, iou=0.45):
+    img0 = cv2.imread(image_path)
+    if img0 is None:
+        raise FileNotFoundError(image_path)
+    in_idx, inp, input_hw, ratio_pad = _prepare_image(trt_model, img0)
+    outputs = trt_model.infer({in_idx: inp})
+    dets = decode_trt_detections(
+        outputs,
+        img0_shape=img0.shape,
+        input_hw=input_hw,
+        ratio_pad=ratio_pad,
+        conf_thres=conf,
+        iou_thres=iou,
+        names=None,
+    )
+    return img0, dets
+
 # ----------------- Main -----------------
 def main():
     ap = argparse.ArgumentParser()
@@ -354,67 +413,19 @@ def main():
         with open(args.labels, "r") as f:
             names = [x.strip() for x in f if x.strip()]
 
-    img0 = cv2.imread(args.source)
-    if img0 is None:
-        raise FileNotFoundError(args.source)
-
-    # Load engine (with plugin registration)
-    trt_model = TRTModule(args.engine, print_plugins=args.print_plugins)
-
-    # Find input binding (first input tensor)
-    input_bindings = [i for i in trt_model.input_binding_indices if not trt_model.engine.is_shape_binding(i)]
-    if len(input_bindings) != 1:
-        raise RuntimeError(f"Unexpected number of tensor inputs: {len(input_bindings)}")
-    in_idx = input_bindings[0]
-
-    # Resolve input shape (after setting binding shape)
-    raw_shape = trt_model.engine.get_binding_shape(in_idx)  # may contain -1
-    # pick (H,W)
-    if raw_shape[-1] == 3 and (len(raw_shape) >= 3) and (raw_shape[-2] > 0 or raw_shape[-3] > 0):
-        # Likely NHWC
-        H = raw_shape[-3] if raw_shape[-3] > 0 else 640
-        W = raw_shape[-2] if raw_shape[-2] > 0 else 640
-        layout = "NHWC"
-    else:
-        # Likely NCHW
-        H = raw_shape[-2] if raw_shape[-2] > 0 else 640
-        W = raw_shape[-1] if raw_shape[-1] > 0 else 640
-        layout = "NCHW"
-
-    img, r, (dw, dh) = letterbox(img0, (H, W), auto=False, scaleFill=False, scaleup=True)
-    inp = img.astype(np.float32) / 255.0
-
-    if layout == "NCHW":
-        inp = inp.transpose(2, 0, 1)[None, ...]  # (1,3,H,W)
-    else:
-        inp = inp[None, ...]  # (1,H, W, 3)
-
-    # Make sure dtype matches binding (avoid trt.nptype)
-    in_dtype = trt_dtype_to_np(trt_model.engine.get_binding_dtype(in_idx))
-    inp = inp.astype(in_dtype, copy=False)
-
-    # Inference
-    outputs = trt_model.infer({in_idx: inp})
-    # Pick the largest output tensor (common case)
-
-    dets = decode_trt_detections(
-        outputs,
-        img0_shape=img0.shape,
-        input_hw=(H, W),
-        ratio_pad=(r, (dw, dh)),
-        conf_thres=args.conf,
-        names=None,
-    )
+    trt_model = load_engine(args.engine, print_plugins=args.print_plugins)
+    img0, dets = infer_image(trt_model, args.source, conf=args.conf, iou=args.iou)
+    img_draw = img0.copy()
 
     # Draw
     for (x1, y1, x2, y2), score, cls in dets:
         p1 = (int(x1), int(y1)); p2 = (int(x2), int(y2))
-        cv2.rectangle(img0, p1, p2, (0,255,0), 2)
+        cv2.rectangle(img_draw, p1, p2, (0,255,0), 2)
         label = f"{cls}:{score:.2f}" if names is None or cls >= len(names) else f"{names[cls]}:{score:.2f}"
-        cv2.putText(img0, label, (p1[0], p1[1]-6), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
+        cv2.putText(img_draw, label, (p1[0], p1[1]-6), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
 
     out_path = os.path.splitext(args.source)[0] + f"_pred_{args.conf:.2f}.jpg"
-    cv2.imwrite(out_path, img0)
+    cv2.imwrite(out_path, img_draw)
     print(f"Saved: {out_path}")
 
 if __name__ == "__main__":

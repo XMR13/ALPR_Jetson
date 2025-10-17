@@ -36,8 +36,8 @@ Train in your external YOLOv9 environment according to that repository’s instr
 ## Export to TensorRT
 - Export ONNX and build FP16 engine with `tools/trtexec_build.sh` (fill actual `trtexec` args per environment).
 - Place the artifacts here:
-  - `models/detector/yolov9-s.onnx`
-  - `models/detector/yolov9-s_fp16.engine`
+  - `models/detector/yolov9-s_plate.onnx`
+  - `models/detector/yolov9-s_plate_fp16.engine`
 
 ## Tips
 - If val AP plate is low and many boxes < 28 px, either increase input size or add a vehicle detector to pre-crop.
