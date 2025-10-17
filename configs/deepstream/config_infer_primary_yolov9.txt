@@ -1,6 +1,6 @@
  [property]
- onnx-file=models/detector/yolov9-s.onnx
- model-engine-file=models/detector/yolov9-s_fp16.engine
+onnx-file=models/detector/yolov9-s_plate.onnx
+model-engine-file=models/detector/yolov9-s_plate_fp16.engine
  network-mode=2            # 0:FP32, 1:INT8, 2:FP16
  num-detected-classes=1    # license_plate
  input-dims=3;640;640;1

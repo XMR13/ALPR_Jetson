@@ -3,8 +3,8 @@
 # Usage:
 #   bash tools/trtexec_build.sh <model.onnx> <output.engine> [extra trtexec args]
 # Examples:
-#   bash tools/trtexec_build.sh models/detector/yolov9-s.onnx models/detector/yolov9-s_fp16.engine --fp16
-#   bash tools/trtexec_build.sh models/detector/yolov9-s.onnx models/detector/yolov9-s_int8.engine --int8 --calib=<cache>
+#   bash tools/trtexec_build.sh models/detector/yolov9-s_plate.onnx models/detector/yolov9-s_plate_fp16.engine --fp16
+#   bash tools/trtexec_build.sh models/detector/yolov9-s_plate.onnx models/detector/yolov9-s_plate_int8.engine --int8 --calib=<cache>
 
 set -euo pipefail
 
