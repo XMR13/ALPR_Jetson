@@ -39,3 +39,27 @@ DeepStream:
 Pelatihan & ekspor YOLOv9 dilakukan di lingkungan eksternal Anda. Lihat `docs/TRAINING_NOTES.md` untuk catatan ekspor ONNX → TensorRT.
 
 Detail rencana dan tonggak: `plan.md`.
+
+OCR (CRNN/Paddle-style) — Preproc & Service
+- Preprocessing module: `src/ocr_service/preprocess.py` (grayscale + CLAHE + normalize to 32x160 by default).
+- Post-processing: `src/ocr_service/postprocess.py` (regex-validasi, perbaikan karakter ambigu, majority vote).
+- OCR TensorRT wrapper: `src/ocr_service/trt_infer.py` (graceful fallback jika TensorRT belum tersedia).
+- FastAPI microservice stub: `src/ocr_service/app.py` (opsional; butuh FastAPI terpasang).
+
+Contoh pakai OCR (lokal, jika FastAPI terpasang):
+```bash
+python -c "from ocr_service.app import create_app; print(bool(create_app()))"  # True jika FastAPI siap
+```
+
+Atau langsung gunakan wrapper (non-service) di Python:
+```python
+from ocr_service.trt_infer import OCRService
+from ocr_service.preprocess import PreprocConfig
+import cv2
+
+svc = OCRService(engine_path="models/ocr/ppo_crnn_fp16.engine",
+                 charset_path="models/ocr/charset.txt",
+                 preproc=PreprocConfig(input_width=160, input_height=32))
+img = cv2.imread("data/labeled/ocr_crops/example.jpg")
+print(svc.infer_batch([img]))
+```
