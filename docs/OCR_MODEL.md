@@ -49,19 +49,36 @@ Jetson (or package it with deployment artifacts).
 
 ## 3. Dataset Preparation
 
-1. **Crop plates from detection annotations**
+1. **Build OCR crops + labels.csv from CVAT** (preferred)
+   - In CVAT, define label `plate` with string attribute `text`.
+   - Export "CVAT for images 1.1" JSON.
+   - Convert to crops + CSV:
    ```bash
-   python tools/crop_from_boxes.py \
-     --coco data/processed/train/coco.json \
-     --images data/processed/train/images \
-     --outdir data/ocr/train/crops
+   python tools/ocr_from_cvat.py \
+     --json export/cvat_images_1.1.json \
+     --images-dir data/raw/cam01/frames \
+     --outdir data/ocr/train
    ```
-   Repeat for validation. Ensure `labels.csv` contains `filename,text` lines.
+   Repeat for validation with a separate export.
+
+   Alternate (if you only have COCO + attributes):
+   ```bash
+   python tools/ocr_from_cvat.py \
+     --json data/processed/train/coco.json \
+     --images-dir data/processed/train/images \
+     --outdir data/ocr/train
+   ```
 
 2. **Synthetic augmentation (recommended)**
-   - Generate 50k–200k synthetic Indonesian plates using realistic fonts.
-   - Apply perspective jitter (±4°), motion blur, exposure changes, and mild
-     noise. Save alongside real crops with labels appended to `labels.csv`.
+   - Generate Indonesian-style plates with `tools/synth_plates.py`:
+   ```bash
+   python tools/synth_plates.py \
+     --outdir data/ocr/synth \
+     --count 80000 \
+     --fonts-dir assets/fonts
+   ```
+   - Merge `data/ocr/synth/labels.csv` into your train CSV, and copy crops into
+     the same `crops/` folder (or point PaddleOCR to multiple datasets).
 
 3. **Optional rectification**
    - If you have quadrilateral annotations, warp each crop to a canonical
@@ -234,4 +251,3 @@ letters consistently flip (e.g., `P ↔ F`).
 
 This document should stay synchronized with `plan.md` Section 5 (Week 2 tasks).
 If you deviate from PaddleOCR, update both references accordingly.
-
