@@ -14,11 +14,24 @@ def cmd_ocr_infer(args: argparse.Namespace) -> int:
         import os, glob, csv
         import cv2  # type: ignore
         from ocr_service.trt_infer import OCRService  # type: ignore
+        from ocr_service.preprocess import PreprocConfig  # type: ignore
     except Exception as e:
         print(f"OCR runtime dependencies missing: {e}", file=sys.stderr)
         return 2
 
-    svc = OCRService(engine_path=args.engine, charset_path=args.charset)
+    svc = OCRService(
+        engine_path=args.engine,
+        charset_path=args.charset,
+        preproc=PreprocConfig(
+            input_width=args.input_width,
+            input_height=args.input_height,
+            channels=args.channels,
+            mean=0.5,
+            std=0.5,
+        ),
+        logits_layout=args.logits_layout,
+        input_layout=args.input_layout,
+    )
 
     paths = []
     if Path(args.source).is_dir():
@@ -86,6 +99,21 @@ def build_parser() -> argparse.ArgumentParser:
     p_ocr.add_argument("--charset", required=True, help="Path to charset.txt (one char per line)")
     p_ocr.add_argument("--source", required=True, help="Image file or directory of images")
     p_ocr.add_argument("--output", default="", help="Optional CSV output path")
+    p_ocr.add_argument("--input-width", type=int, default=160, help="Model input width (e.g., 160 or 128)")
+    p_ocr.add_argument("--input-height", type=int, default=32, help="Model input height (e.g., 32 or 64)")
+    p_ocr.add_argument("--channels", type=int, default=1, help="Input channels (1=gray, 3=RGB)")
+    p_ocr.add_argument(
+        "--input-layout",
+        choices=["NCHW", "NHWC"],
+        default="NCHW",
+        help="Engine input layout",
+    )
+    p_ocr.add_argument(
+        "--logits-layout",
+        choices=["NTC", "NCT"],
+        default="NTC",
+        help="Engine output logits layout",
+    )
     p_ocr.set_defaults(func=cmd_ocr_infer)
 
     return p

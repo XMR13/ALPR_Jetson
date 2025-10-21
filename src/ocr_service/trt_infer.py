@@ -128,12 +128,16 @@ class OCRService:
         charset_path: Optional[str] = None,
         preproc: PreprocConfig = PreprocConfig(),
         logits_layout: str = "NTC",
+        input_layout: str = "NCHW",
     ) -> None:
         if logits_layout not in {"NTC", "NCT"}:
             raise ValueError("logits_layout must be 'NTC' or 'NCT'")
+        if input_layout not in {"NCHW", "NHWC"}:
+            raise ValueError("input_layout must be 'NCHW' or 'NHWC'")
         self.preproc = preproc
         self.charset = _load_charset(charset_path)
         self.logits_layout = logits_layout
+        self.input_layout = input_layout
         self._runner: Optional[_TRTModule] = None
         if engine_path and _TRT_AVAILABLE:
             try:
@@ -153,7 +157,9 @@ class OCRService:
         if self._runner is None:
             return ["<ocr-unavailable>"] * len(imgs)
 
-        x = prepare_ocr_batch(imgs, self.preproc)  # [N,1,H,W]
+        x = prepare_ocr_batch(imgs, self.preproc)  # [N,C,H,W]
+        if self.input_layout == "NHWC":
+            x = np.transpose(x, (0, 2, 3, 1))
         logits = self._runner.infer(x)
         if logits.ndim != 3:
             raise ValueError(f"Expected 3D logits, got shape {logits.shape}")
