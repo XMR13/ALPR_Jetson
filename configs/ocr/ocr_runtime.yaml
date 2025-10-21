@@ -1,8 +1,14 @@
- input_width: 160
- input_height: 32
- fp16: true
- batch_size: 16
- normalize:
-   mean: 0.5
-   std: 0.5
-
+engine_path: models/ocr/cct_s.engine
+charset_path: models/ocr/cct_charset.txt
+input_width: 160
+input_height: 32
+channels: 1
+logits_layout: NTC
+fp16: true
+batch_size: 16
+normalize:
+  mean: 0.5
+  std: 0.5
+clahe:
+  clip_limit: 2.0
+  tile_grid: 8

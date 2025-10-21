@@ -1,0 +1,12 @@
+RUN ON JETSON — TensorRT engine inspection (CCT-S)
+
+Command:
+trtexec --loadEngine=models/ocr/cct_s.engine --dumpProfile --verbose
+
+Notes:
+- Capture bindings (input NCHW, output layout [N,T,C] or [N,C,T])
+- Record timing summary (mean/percentiles)
+- Confirm FP16 and max batch size
+
+--- PASTE FULL OUTPUT BELOW ---
+

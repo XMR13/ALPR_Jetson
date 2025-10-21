@@ -251,3 +251,23 @@ letters consistently flip (e.g., `P ↔ F`).
 
 This document should stay synchronized with `plan.md` Section 5 (Week 2 tasks).
 If you deviate from PaddleOCR, update both references accordingly.
+
+## 10. TensorRT Engines in This Repo
+
+Two OCR engines are currently tracked under `models/ocr/`:
+
+- **CCT-S (fast-plate-ocr)** — `cct_s.engine`
+  - Runtime config: `configs/ocr/ocr_runtime.yaml`
+  - Charset file: `models/ocr/cct_charset.txt`
+  - Build/inspection logs: drop the `trtexec` output in
+    `docs/build_logs/YYYY-MM-DD_trtexec_cct_s.log`.
+- **NVIDIA LPRNet** — `LPR_net.engine`
+  - Runtime config: `configs/ocr/ocr_runtime_lprnet.yaml`
+  - Charset file: `models/ocr/LPR_net_charset.txt`
+  - Build/inspection logs: store under
+    `docs/build_logs/YYYY-MM-DD_trtexec_LPR_net.log`.
+
+When you rebuild or inspect an engine on the Jetson, copy the relevant
+`trtexec` output into the `docs/build_logs/` folder and only reference the
+summary (input shape, output layout, latency) in this document. That keeps the
+documentation concise while preserving raw evidence for future audits.

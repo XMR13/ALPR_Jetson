@@ -1,0 +1,14 @@
+engine_path: models/ocr/LPR_net.engine
+charset_path: models/ocr/LPR_net_charset.txt
+input_width: 96
+input_height: 48
+channels: 3
+logits_layout: NCT
+fp16: true
+batch_size: 16
+normalize:
+  mean: 0.5
+  std: 0.5
+clahe:
+  clip_limit: 2.0
+  tile_grid: 8
