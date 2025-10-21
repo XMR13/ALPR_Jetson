@@ -1,0 +1,176 @@
+&&&& RUNNING TensorRT.trtexec [TensorRT v8502] # /usr/src/tensorrt/bin/trtexec --loadEngine=models/ocr/LPR_net.engine --dumpProfile --verbose
+[10/21/2025-16:07:42] [I] === Model Options ===
+[10/21/2025-16:07:42] [I] Format: *
+[10/21/2025-16:07:42] [I] Model: 
+[10/21/2025-16:07:42] [I] Output:
+[10/21/2025-16:07:42] [I] === Build Options ===
+[10/21/2025-16:07:42] [I] Max batch: 1
+[10/21/2025-16:07:42] [I] Memory Pools: workspace: default, dlaSRAM: default, dlaLocalDRAM: default, dlaGlobalDRAM: default
+[10/21/2025-16:07:42] [I] minTiming: 1
+[10/21/2025-16:07:42] [I] avgTiming: 8
+[10/21/2025-16:07:42] [I] Precision: FP32
+[10/21/2025-16:07:42] [I] LayerPrecisions: 
+[10/21/2025-16:07:42] [I] Calibration: 
+[10/21/2025-16:07:42] [I] Refit: Disabled
+[10/21/2025-16:07:42] [I] Sparsity: Disabled
+[10/21/2025-16:07:42] [I] Safe mode: Disabled
+[10/21/2025-16:07:42] [I] DirectIO mode: Disabled
+[10/21/2025-16:07:42] [I] Restricted mode: Disabled
+[10/21/2025-16:07:42] [I] Build only: Disabled
+[10/21/2025-16:07:42] [I] Save engine: 
+[10/21/2025-16:07:42] [I] Load engine: models/ocr/LPR_net.engine
+[10/21/2025-16:07:42] [I] Profiling verbosity: 0
+[10/21/2025-16:07:42] [I] Tactic sources: Using default tactic sources
+[10/21/2025-16:07:42] [I] timingCacheMode: local
+[10/21/2025-16:07:42] [I] timingCacheFile: 
+[10/21/2025-16:07:42] [I] Heuristic: Disabled
+[10/21/2025-16:07:42] [I] Preview Features: Use default preview flags.
+[10/21/2025-16:07:42] [I] Input(s)s format: fp32:CHW
+[10/21/2025-16:07:42] [I] Output(s)s format: fp32:CHW
+[10/21/2025-16:07:42] [I] Input build shapes: model
+[10/21/2025-16:07:42] [I] Input calibration shapes: model
+[10/21/2025-16:07:42] [I] === System Options ===
+[10/21/2025-16:07:42] [I] Device: 0
+[10/21/2025-16:07:42] [I] DLACore: 
+[10/21/2025-16:07:42] [I] Plugins:
+[10/21/2025-16:07:42] [I] === Inference Options ===
+[10/21/2025-16:07:42] [I] Batch: 1
+[10/21/2025-16:07:42] [I] Input inference shapes: model
+[10/21/2025-16:07:42] [I] Iterations: 10
+[10/21/2025-16:07:42] [I] Duration: 3s (+ 200ms warm up)
+[10/21/2025-16:07:42] [I] Sleep time: 0ms
+[10/21/2025-16:07:42] [I] Idle time: 0ms
+[10/21/2025-16:07:42] [I] Streams: 1
+[10/21/2025-16:07:42] [I] ExposeDMA: Disabled
+[10/21/2025-16:07:42] [I] Data transfers: Enabled
+[10/21/2025-16:07:42] [I] Spin-wait: Disabled
+[10/21/2025-16:07:42] [I] Multithreading: Disabled
+[10/21/2025-16:07:42] [I] CUDA Graph: Disabled
+[10/21/2025-16:07:42] [I] Separate profiling: Disabled
+[10/21/2025-16:07:42] [I] Time Deserialize: Disabled
+[10/21/2025-16:07:42] [I] Time Refit: Disabled
+[10/21/2025-16:07:42] [I] NVTX verbosity: 0
+[10/21/2025-16:07:42] [I] Persistent Cache Ratio: 0
+[10/21/2025-16:07:42] [I] Inputs:
+[10/21/2025-16:07:42] [I] === Reporting Options ===
+[10/21/2025-16:07:42] [I] Verbose: Enabled
+[10/21/2025-16:07:42] [I] Averages: 10 inferences
+[10/21/2025-16:07:42] [I] Percentiles: 90,95,99
+[10/21/2025-16:07:42] [I] Dump refittable layers:Disabled
+[10/21/2025-16:07:42] [I] Dump output: Disabled
+[10/21/2025-16:07:42] [I] Profile: Enabled
+[10/21/2025-16:07:42] [I] Export timing to JSON file: 
+[10/21/2025-16:07:42] [I] Export output to JSON file: 
+[10/21/2025-16:07:42] [I] Export profile to JSON file: 
+[10/21/2025-16:07:42] [I] 
+[10/21/2025-16:07:42] [I] === Device Information ===
+[10/21/2025-16:07:42] [I] Selected Device: Xavier
+[10/21/2025-16:07:42] [I] Compute Capability: 7.2
+[10/21/2025-16:07:42] [I] SMs: 6
+[10/21/2025-16:07:42] [I] Compute Clock Rate: 1.109 GHz
+[10/21/2025-16:07:42] [I] Device Global Memory: 14885 MiB
+[10/21/2025-16:07:42] [I] Shared Memory per SM: 96 KiB
+[10/21/2025-16:07:42] [I] Memory Bus Width: 256 bits (ECC disabled)
+[10/21/2025-16:07:42] [I] Memory Clock Rate: 1.109 GHz
+[10/21/2025-16:07:42] [I] 
+[10/21/2025-16:07:42] [I] TensorRT version: 8.5.2
+[10/21/2025-16:07:42] [V] [TRT] Registered plugin creator - ::BatchedNMSDynamic_TRT version 1
+[10/21/2025-16:07:42] [V] [TRT] Registered plugin creator - ::BatchedNMS_TRT version 1
+[10/21/2025-16:07:42] [V] [TRT] Registered plugin creator - ::BatchTilePlugin_TRT version 1
+[10/21/2025-16:07:42] [V] [TRT] Registered plugin creator - ::Clip_TRT version 1
+[10/21/2025-16:07:42] [V] [TRT] Registered plugin creator - ::CoordConvAC version 1
+[10/21/2025-16:07:42] [V] [TRT] Registered plugin creator - ::CropAndResizeDynamic version 1
+[10/21/2025-16:07:42] [V] [TRT] Registered plugin creator - ::CropAndResize version 1
+[10/21/2025-16:07:42] [V] [TRT] Registered plugin creator - ::DecodeBbox3DPlugin version 1
+[10/21/2025-16:07:42] [V] [TRT] Registered plugin creator - ::DetectionLayer_TRT version 1
+[10/21/2025-16:07:42] [V] [TRT] Registered plugin creator - ::EfficientNMS_Explicit_TF_TRT version 1
+[10/21/2025-16:07:42] [V] [TRT] Registered plugin creator - ::EfficientNMS_Implicit_TF_TRT version 1
+[10/21/2025-16:07:42] [V] [TRT] Registered plugin creator - ::EfficientNMS_ONNX_TRT version 1
+[10/21/2025-16:07:42] [V] [TRT] Registered plugin creator - ::EfficientNMS_TRT version 1
+[10/21/2025-16:07:42] [V] [TRT] Registered plugin creator - ::FlattenConcat_TRT version 1
+[10/21/2025-16:07:42] [V] [TRT] Registered plugin creator - ::GenerateDetection_TRT version 1
+[10/21/2025-16:07:42] [V] [TRT] Registered plugin creator - ::GridAnchor_TRT version 1
+[10/21/2025-16:07:42] [V] [TRT] Registered plugin creator - ::GridAnchorRect_TRT version 1
+[10/21/2025-16:07:42] [V] [TRT] Registered plugin creator - ::GroupNorm version 1
+[10/21/2025-16:07:42] [V] [TRT] Registered plugin creator - ::InstanceNormalization_TRT version 1
+[10/21/2025-16:07:42] [V] [TRT] Registered plugin creator - ::InstanceNormalization_TRT version 2
+[10/21/2025-16:07:42] [V] [TRT] Registered plugin creator - ::LayerNorm version 1
+[10/21/2025-16:07:42] [V] [TRT] Registered plugin creator - ::LReLU_TRT version 1
+[10/21/2025-16:07:42] [V] [TRT] Registered plugin creator - ::MultilevelCropAndResize_TRT version 1
+[10/21/2025-16:07:42] [V] [TRT] Registered plugin creator - ::MultilevelProposeROI_TRT version 1
+[10/21/2025-16:07:42] [V] [TRT] Registered plugin creator - ::MultiscaleDeformableAttnPlugin_TRT version 1
+[10/21/2025-16:07:42] [V] [TRT] Registered plugin creator - ::NMSDynamic_TRT version 1
+[10/21/2025-16:07:42] [V] [TRT] Registered plugin creator - ::NMS_TRT version 1
+[10/21/2025-16:07:42] [V] [TRT] Registered plugin creator - ::Normalize_TRT version 1
+[10/21/2025-16:07:42] [V] [TRT] Registered plugin creator - ::PillarScatterPlugin version 1
+[10/21/2025-16:07:42] [V] [TRT] Registered plugin creator - ::PriorBox_TRT version 1
+[10/21/2025-16:07:42] [V] [TRT] Registered plugin creator - ::ProposalDynamic version 1
+[10/21/2025-16:07:42] [V] [TRT] Registered plugin creator - ::ProposalLayer_TRT version 1
+[10/21/2025-16:07:42] [V] [TRT] Registered plugin creator - ::Proposal version 1
+[10/21/2025-16:07:42] [V] [TRT] Registered plugin creator - ::PyramidROIAlign_TRT version 1
+[10/21/2025-16:07:42] [V] [TRT] Registered plugin creator - ::Region_TRT version 1
+[10/21/2025-16:07:42] [V] [TRT] Registered plugin creator - ::Reorg_TRT version 1
+[10/21/2025-16:07:42] [V] [TRT] Registered plugin creator - ::ResizeNearest_TRT version 1
+[10/21/2025-16:07:42] [V] [TRT] Registered plugin creator - ::ROIAlign_TRT version 1
+[10/21/2025-16:07:42] [V] [TRT] Registered plugin creator - ::RPROI_TRT version 1
+[10/21/2025-16:07:42] [V] [TRT] Registered plugin creator - ::ScatterND version 1
+[10/21/2025-16:07:42] [V] [TRT] Registered plugin creator - ::SeqLen2Spatial version 1
+[10/21/2025-16:07:42] [V] [TRT] Registered plugin creator - ::SpecialSlice_TRT version 1
+[10/21/2025-16:07:42] [V] [TRT] Registered plugin creator - ::SplitGeLU version 1
+[10/21/2025-16:07:42] [V] [TRT] Registered plugin creator - ::Split version 1
+[10/21/2025-16:07:42] [V] [TRT] Registered plugin creator - ::VoxelGeneratorPlugin version 1
+[10/21/2025-16:07:42] [I] Engine loaded in 0.0397316 sec.
+[10/21/2025-16:07:43] [I] [TRT] Loaded engine size: 28 MiB
+[10/21/2025-16:07:44] [V] [TRT] Deserialization required 45400 microseconds.
+[10/21/2025-16:07:44] [I] [TRT] [MemUsageChange] TensorRT-managed allocation in engine deserialization: CPU +0, GPU +27, now: CPU 0, GPU 27 (MiB)
+[10/21/2025-16:07:44] [I] Engine deserialized in 1.85796 sec.
+[10/21/2025-16:07:44] [V] [TRT] Total per-runner device persistent memory is 28160
+[10/21/2025-16:07:44] [V] [TRT] Total per-runner host persistent memory is 68384
+[10/21/2025-16:07:44] [V] [TRT] Allocated activation device memory of size 39618048
+[10/21/2025-16:07:46] [I] [TRT] [MemUsageChange] TensorRT-managed allocation in IExecutionContext creation: CPU +0, GPU +38, now: CPU 0, GPU 65 (MiB)
+[10/21/2025-16:07:46] [I] Setting persistentCacheLimit to 0 bytes.
+[10/21/2025-16:07:46] [V] Using enqueueV3.
+[10/21/2025-16:07:46] [W] Shape missing for input with dynamic shape: image_inputAutomatically setting shape to: 1x3x48x96
+[10/21/2025-16:07:46] [I] Using random values for input image_input
+[10/21/2025-16:07:46] [I] Created input binding for image_input with dimensions 1x3x48x96
+[10/21/2025-16:07:46] [I] Using random values for output tf_op_layer_Max
+[10/21/2025-16:07:46] [I] Created output binding for tf_op_layer_Max with dimensions 1x24
+[10/21/2025-16:07:46] [I] Using random values for output tf_op_layer_ArgMax
+[10/21/2025-16:07:46] [I] Created output binding for tf_op_layer_ArgMax with dimensions 1x24
+[10/21/2025-16:07:46] [I] Starting inference
+[10/21/2025-16:07:49] [I] The e2e network timing is not reported since it is inaccurate due to the extra synchronizations when the profiler is enabled.
+[10/21/2025-16:07:49] [I] To show e2e network timing report, add --separateProfileRun to profile layer timing in a separate run or remove --dumpProfile to disable the profiler.
+[10/21/2025-16:07:49] [I] 
+[10/21/2025-16:07:49] [I] === Profile (320 iterations ) ===
+[10/21/2025-16:07:49] [I]                                                                                Layer   Time (ms)   Avg. Time (ms)   Median Time (ms)   Time %
+[10/21/2025-16:07:49] [I]                                                                 [HostToDeviceCopy 0]       10.51           0.0329             0.0293      0.3
+[10/21/2025-16:07:49] [I]                                                       tf_op_layer_Sum/Sum_reduce_min       11.35           0.0355             0.0323      0.4
+[10/21/2025-16:07:49] [I]                  Reformatting CopyNode for Input Tensor 0 to conv1 + PWN(re_lu_clip)       15.72           0.0491             0.0417      0.5
+[10/21/2025-16:07:49] [I]                                                              conv1 + PWN(re_lu_clip)       32.76           0.1024             0.0907      1.1
+[10/21/2025-16:07:49] [I]                                                                 re_lu/Relu:0_pooling       17.23           0.0538             0.0423      0.6
+[10/21/2025-16:07:49] [I]                                                   res2a_branch2a + PWN(re_lu_1_clip)       40.05           0.1251             0.1164      1.3
+[10/21/2025-16:07:49] [I]                                                                        res2a_branch1       16.12           0.0504             0.0411      0.5
+[10/21/2025-16:07:49] [I]                             res2a_branch2b + tf_op_layer_add/add + PWN(re_lu_2_clip)       41.70           0.1303             0.1252      1.4
+[10/21/2025-16:07:49] [I]                                                   res2b_branch2a + PWN(re_lu_3_clip)       35.63           0.1113             0.1087      1.2
+[10/21/2025-16:07:49] [I]                         res2b_branch2b + tf_op_layer_add_1/add_1 + PWN(re_lu_4_clip)       38.83           0.1213             0.1153      1.3
+[10/21/2025-16:07:49] [I]                                                   res3a_branch2a + PWN(re_lu_5_clip)       22.48           0.0703             0.0667      0.7
+[10/21/2025-16:07:49] [I]                                                                        res3a_branch1       12.83           0.0401             0.0377      0.4
+[10/21/2025-16:07:49] [I]                         res3a_branch2b + tf_op_layer_add_2/add_2 + PWN(re_lu_6_clip)       32.10           0.1003             0.0978      1.0
+[10/21/2025-16:07:49] [I]                                                   res3b_branch2a + PWN(re_lu_7_clip)       29.89           0.0934             0.0892      1.0
+[10/21/2025-16:07:49] [I]                         res3b_branch2b + tf_op_layer_add_3/add_3 + PWN(re_lu_8_clip)       34.99           0.1093             0.0928      1.1
+[10/21/2025-16:07:49] [I]                                                   res4a_branch2a + PWN(re_lu_9_clip)       41.89           0.1309             0.0908      1.4
+[10/21/2025-16:07:49] [I]                                                                        res4a_branch1        9.02           0.0282             0.0278      0.3
+[10/21/2025-16:07:49] [I]                        res4a_branch2b + tf_op_layer_add_4/add_4 + PWN(re_lu_10_clip)       43.88           0.1371             0.1309      1.4
+[10/21/2025-16:07:49] [I]                                                  res4b_branch2a + PWN(re_lu_11_clip)       39.21           0.1225             0.1174      1.3
+[10/21/2025-16:07:49] [I]                        res4b_branch2b + tf_op_layer_add_5/add_5 + PWN(re_lu_12_clip)       40.27           0.1258             0.1192      1.3
+[10/21/2025-16:07:49] [I]                                                  res5a_branch2a + PWN(re_lu_13_clip)       55.94           0.1748             0.1699      1.8
+[10/21/2025-16:07:49] [I]                                                                        res5a_branch1       11.60           0.0363             0.0354      0.4
+[10/21/2025-16:07:49] [I]                        res5a_branch2b + tf_op_layer_add_6/add_6 + PWN(re_lu_14_clip)       75.99           0.2375             0.2187      2.5
+[10/21/2025-16:07:49] [I]                                                  res5b_branch2a + PWN(re_lu_15_clip)       97.69           0.3053             0.2138      3.2
+[10/21/2025-16:07:49] [I]                        res5b_branch2b + tf_op_layer_add_7/add_7 + PWN(re_lu_16_clip)       73.18           0.2287             0.2146      2.4
+[10/21/2025-16:07:49] [I]                                               {ForeignNode[lstm_W...Max_reduce_min]}     2162.68           6.7584             6.1180     70.3
+[10/21/2025-16:07:49] [I]  Reformatting CopyNode for Output Tensor 1 to {ForeignNode[lstm_W...Max_reduce_min]}       20.64           0.0645             0.0633      0.7
+[10/21/2025-16:07:49] [I]                                                                        ArgMax_argmax       11.85           0.0370             0.0300      0.4
+[10/21/2025-16:07:49] [I]                                                                                Total     3076.04           9.6126             8.9061    100.0
+[10/21/2025-16:07:49] [I] 
+&&&& PASSED TensorRT.trtexec [TensorRT v8502] # /usr/src/tensorrt/bin/trtexec --loadEngine=models/ocr/LPR_net.engine --dumpProfile --verbose
