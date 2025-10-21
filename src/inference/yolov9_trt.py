@@ -55,8 +55,10 @@ def nms_boxes(boxes, scores, iou_threshold=0.45):
     return np.array(keep, dtype=np.int32)
 
 def iou(box, boxes):
+    """digunakan untuk meghitung iou antara box dengan boxxes yang lain
+    perlu diketahui rumus iou adalah intersection over union (area berpotongan dibagi denagan area gabungan)"""
     # box: [4], boxes: [M,4]
-    xx1 = np.maximum(box[0], boxes[:,0])
+    xx1 = np.maximum(box[0], boxes[:,0]) 
     yy1 = np.maximum(box[1], boxes[:,1])
     xx2 = np.minimum(box[2], boxes[:,2])
     yy2 = np.minimum(box[3], boxes[:,3])
