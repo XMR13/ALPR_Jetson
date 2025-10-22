@@ -1,0 +1,215 @@
+"""ONNX OCR inference (slot-based alphabet) with CUDA EP default.
+
+This module implements an OCR runner for models that emit per-slot logits of
+shape [N, S, V] or flattened [N*S, V], where:
+- S = max plate slots
+- V = vocabulary size (len(alphabet))
+
+It mirrors the behavior in models like CCT_S: RGB or grayscale NHWC uint8
+input, optional keep-aspect letterbox, and a pad character that is removed
+after argmax decoding.
+
+Jetson notes:
+- Default provider preference is CUDAExecutionProvider, then CPUExecutionProvider.
+- TensorRTExecutionProvider is intentionally not used by default to avoid long
+  build times; it can be enabled by passing `prefer_trt=True`.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+
+import cv2  # type: ignore
+import numpy as np
+
+try:
+    import onnxruntime as ort  # type: ignore
+except Exception as e:  # pragma: no cover
+    ort = None  # type: ignore
+
+
+_INTERP = {
+    "nearest": cv2.INTER_NEAREST,
+    "linear": cv2.INTER_LINEAR,
+    "cubic": cv2.INTER_CUBIC,
+    "area": cv2.INTER_AREA,
+    "lanczos4": cv2.INTER_LANCZOS4,
+}
+
+
+def _to_rgb(img_bgr: np.ndarray) -> np.ndarray:
+    if img_bgr.ndim == 2:
+        return cv2.cvtColor(img_bgr, cv2.COLOR_GRAY2RGB)
+    return cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+
+
+def _ensure_color_mode(img: np.ndarray, mode: str) -> np.ndarray:
+    mode = mode.lower()
+    if mode not in {"rgb", "grayscale"}:
+        raise ValueError(f"image_color_mode must be 'rgb' or 'grayscale', got {mode}")
+    if mode == "grayscale":
+        if img.ndim == 2:
+            return img
+        if img.ndim == 3 and img.shape[2] == 3:
+            return cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        raise ValueError("invalid input for grayscale mode")
+    # rgb
+    if img.ndim == 3 and img.shape[2] == 3:
+        return _to_rgb(img)
+    if img.ndim == 2:
+        return cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
+    raise ValueError("invalid input for rgb mode")
+
+
+def _resize_letterbox(
+    img: np.ndarray,
+    target_h: int,
+    target_w: int,
+    image_color_mode: str,
+    keep_aspect_ratio: bool,
+    interpolation: str,
+    padding_color: Sequence[int] | int = (144, 144, 144),
+) -> np.ndarray:
+    inter = _INTERP.get(interpolation.lower(), cv2.INTER_LINEAR)
+    if not keep_aspect_ratio:
+        return cv2.resize(img, (int(target_w), int(target_h)), interpolation=inter)
+
+    oh, ow = img.shape[:2]
+    r = min(float(target_h) / float(oh), float(target_w) / float(ow))
+    new_w, new_h = int(round(ow * r)), int(round(oh * r))
+    if (new_w, new_h) != (ow, oh):
+        img = cv2.resize(img, (new_w, new_h), interpolation=inter)
+    dw = (target_w - new_w) / 2.0
+    dh = (target_h - new_h) / 2.0
+    top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1))
+    left, right = int(round(dw - 0.1)), int(round(dw + 0.1))
+
+    if image_color_mode.lower() == "grayscale":
+        if isinstance(padding_color, (list, tuple)):
+            color_gray = int(padding_color[0])
+        else:
+            color_gray = int(padding_color)
+        return cv2.copyMakeBorder(
+            img, top, bottom, left, right, borderType=cv2.BORDER_CONSTANT, value=color_gray
+        )
+    # rgb
+    if isinstance(padding_color, (list, tuple)):
+        if len(padding_color) != 3:
+            raise ValueError("padding_color must have length 3 for RGB")
+        color_rgb = tuple(int(c) for c in padding_color)
+    else:
+        v = int(padding_color)
+        color_rgb = (v, v, v)
+    return cv2.copyMakeBorder(
+        img, top, bottom, left, right, borderType=cv2.BORDER_CONSTANT, value=color_rgb
+    )
+
+
+def _decode_logits(
+    logits: np.ndarray,
+    max_slots: int,
+    alphabet: str,
+    pad_char: str,
+    return_confidence: bool = False,
+) -> List[str] | Tuple[List[str], List[List[float]]]:
+    arr = np.asarray(logits)
+    if arr.ndim == 3:
+        n, s, v = arr.shape
+    elif arr.ndim == 2:
+        if arr.shape[0] % max_slots != 0:
+            raise ValueError(f"cannot reshape logits of shape {arr.shape} with max_slots={max_slots}")
+        n = arr.shape[0] // max_slots
+        s = max_slots
+        v = arr.shape[1]
+        arr = arr.reshape(n, s, v)
+    else:
+        raise ValueError(f"unexpected logits shape {arr.shape}")
+
+    idx = arr.argmax(axis=-1)  # [N,S]
+    probs = arr.max(axis=-1)   # [N,S]
+
+    out_texts: List[str] = []
+    out_confs: List[List[float]] = []
+    for i in range(idx.shape[0]):
+        chars: List[str] = []
+        confs: List[float] = []
+        for j in range(idx.shape[1]):
+            k = int(idx[i, j])
+            ch = alphabet[k]
+            if ch == pad_char:
+                continue
+            chars.append(ch)
+            confs.append(float(probs[i, j]))
+        out_texts.append("".join(chars))
+        out_confs.append(confs)
+    return (out_texts, out_confs) if return_confidence else out_texts
+
+
+@dataclass(frozen=True)
+class PlateConfig:
+    max_plate_slots: int
+    alphabet: str
+    pad_char: str
+    img_height: int
+    img_width: int
+    keep_aspect_ratio: bool = False
+    interpolation: str = "linear"
+    image_color_mode: str = "rgb"  # or "grayscale"
+    padding_color: Sequence[int] | int = (144, 144, 144)
+
+
+class OnnxPlateOCR:
+    def __init__(
+        self,
+        onnx_path: str,
+        plate_cfg: PlateConfig,
+        prefer_trt: bool = False,
+    ) -> None:
+        if ort is None:
+            raise RuntimeError("onnxruntime is not installed; install it to use ONNX OCR")
+        available = set(ort.get_available_providers())
+        providers: List[str] = []
+        if prefer_trt and "TensorrtExecutionProvider" in available:
+            providers.append("TensorrtExecutionProvider")
+        if "CUDAExecutionProvider" in available:
+            providers.append("CUDAExecutionProvider")
+        providers.append("CPUExecutionProvider")
+
+        self.session = ort.InferenceSession(
+            onnx_path,
+            providers=[p for p in providers if p in available] or ["CPUExecutionProvider"],
+        )
+        self.input_name = self.session.get_inputs()[0].name
+        self.output_name = self.session.get_outputs()[0].name
+        self.cfg = plate_cfg
+
+    def _preprocess_one(self, img: np.ndarray) -> np.ndarray:
+        img = _ensure_color_mode(img, self.cfg.image_color_mode)
+        img = _resize_letterbox(
+            img,
+            target_h=int(self.cfg.img_height),
+            target_w=int(self.cfg.img_width),
+            image_color_mode=self.cfg.image_color_mode,
+            keep_aspect_ratio=bool(self.cfg.keep_aspect_ratio),
+            interpolation=self.cfg.interpolation,
+            padding_color=self.cfg.padding_color,
+        )
+        if self.cfg.image_color_mode.lower() == "grayscale" and img.ndim == 2:
+            img = img[:, :, None]
+        return img.astype(np.uint8)
+
+    def infer_batch(self, images_bgr: Iterable[np.ndarray], return_confidence: bool = False):
+        imgs = list(images_bgr)
+        if not imgs:
+            return []
+        batch = np.stack([self._preprocess_one(x) for x in imgs], axis=0)  # NHWC uint8
+        out = self.session.run([self.output_name], {self.input_name: batch})[0]
+        return _decode_logits(
+            out,
+            max_slots=int(self.cfg.max_plate_slots),
+            alphabet=str(self.cfg.alphabet),
+            pad_char=str(self.cfg.pad_char),
+            return_confidence=return_confidence,
+        )
+

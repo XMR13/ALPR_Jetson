@@ -43,7 +43,9 @@ Detail rencana dan tonggak: `plan.md`.
 OCR (CRNN/Paddle-style) — Preproc & Service
 - Preprocessing module: `src/ocr_service/preprocess.py` (grayscale + CLAHE + normalize to 32x160 by default).
 - Post-processing: `src/ocr_service/postprocess.py` (regex-validasi, perbaikan karakter ambigu, majority vote).
-- OCR TensorRT wrapper: `src/ocr_service/trt_infer.py` (graceful fallback jika TensorRT belum tersedia).
+- OCR runtime:
+  - TensorRT CTC: `src/ocr_service/trt_infer.py`
+  - ONNX slot-based (misal CCT-S): `src/ocr_service/onnx_infer.py` + konfigurasi YAML (`models/ocr/cct_s_v1_global_plate_config.yaml`).
 - FastAPI microservice stub: `src/ocr_service/app.py` (opsional; butuh FastAPI terpasang).
 - Pelatihan & ekspor OCR: lihat `docs/OCR_MODEL.md` untuk panduan PaddleOCR → ONNX → TensorRT, termasuk target akurasi dan layout model.
 - Evaluasi akurasi OCR: `tools/eval_ocr.py --engine ... --charset ... --crops ... --labels ...` menghitung exact-match dan CER.
@@ -66,17 +68,34 @@ img = cv2.imread("data/labeled/ocr_crops/example.jpg")
 print(svc.infer_batch([img]))
 ```
 
-CLI cepat untuk uji OCR (butuh engine + charset):
+CLI cepat untuk uji OCR (pilih backend):
 
 ```bash
+# TensorRT (CTC)
 python -m alpr_jetson ocr-infer \
   --engine models/ocr/ppo_crnn_fp16.engine \
   --charset models/ocr/charset.txt \
-  --source data/labeled/ocr_crops/ \
-  --output export/ocr_preds.csv
+  --source data/labeled/ocr_crops/
+
+# ONNX (slot-based)
+python -m alpr_jetson ocr-infer \
+  --onnx models/ocr/cct_s_v1_global.onnx \
+  --plate-config models/ocr/cct_s_v1_global_plate_config.yaml \
+  --source data/labeled/ocr_crops/
 ```
 
 Catatan lebih rinci untuk ONNX → TensorRT OCR ada di `docs/OCR_NOTES.md`.
+
+End-to-end detector + OCR pada folder gambar:
+
+```bash
+python -m alpr_jetson e2e \
+  --det-engine models/detector/yolov9-s_plate_fp16.engine \
+  --onnx models/ocr/cct_s_v1_global.onnx \
+  --plate-config models/ocr/cct_s_v1_global_plate_config.yaml \
+  --source data/raw/cam01/frames \
+  --annotate-dir export/eval/e2e_vis
+```
 
 
 API (FastAPI) — Stub Endpoints
