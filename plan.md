@@ -236,6 +236,7 @@ alpr-indonesia/
 * Create/extend `src/api_server/server.py` endpoints. Save events to SQLite + snapshots to `export/snapshots/`.
 * **E2E test**: RTSP → DS (YOLOv9 LPD → OCR) → API; dump events for 1–2 hours.
 * Lightweight offline validation: CLI `python -m alpr_jetson e2e` to run detector+OCR on still images before DS wiring.
+* Resource tuning on Jetson NX: expose ONNXRuntime provider choice (CUDA/CPU) and configurable CUDA allocator cap to prevent OOM during E2E runs; document recommended flags (e.g., `--onnx-provider cuda --onnx-gpu-mem-limit-mb 512`).
 * Acceptance for this milestone: initial exact‑match plate accuracy; p95 end‑to‑end latency < 80 ms; `/healthz` and `/metrics` expose FPS and queue depth.
 
 ### Week 3 — Quality Push I

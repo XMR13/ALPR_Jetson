@@ -165,20 +165,47 @@ class OnnxPlateOCR:
         onnx_path: str,
         plate_cfg: PlateConfig,
         prefer_trt: bool = False,
+        provider: str = "cuda",
+        gpu_mem_limit_mb: Optional[int] = None,
     ) -> None:
         if ort is None:
             raise RuntimeError("onnxruntime is not installed; install it to use ONNX OCR")
         available = set(ort.get_available_providers())
-        providers: List[str] = []
+        # Session options tuned for low memory
+        so = ort.SessionOptions()
+        so.enable_mem_pattern = False
+        so.enable_cpu_mem_arena = False
+        so.intra_op_num_threads = 1
+
+        selected_providers: List[str] = []
+        provider_options: List[Dict[str, Any]] = []
+
         if prefer_trt and "TensorrtExecutionProvider" in available:
-            providers.append("TensorrtExecutionProvider")
-        if "CUDAExecutionProvider" in available:
-            providers.append("CUDAExecutionProvider")
-        providers.append("CPUExecutionProvider")
+            selected_providers.append("TensorrtExecutionProvider")
+            provider_options.append({})
+
+        prov = provider.lower()
+        if prov == "cuda" and "CUDAExecutionProvider" in available:
+            selected_providers.append("CUDAExecutionProvider")
+            opts: Dict[str, Any] = {
+                # Limit GPU allocator to reduce OOM risk on Jetson; None means default
+                # Value is in bytes
+                "gpu_mem_limit": int(gpu_mem_limit_mb * 1024 * 1024) if gpu_mem_limit_mb else 0,
+                "arena_extend_strategy": "kNextPowerOfTwo",
+                "do_copy_in_default_stream": 1,
+                "cudnn_conv_algo_search": "HEURISTIC",
+            }
+            provider_options.append(opts)
+
+        # Always include CPU fallback
+        selected_providers.append("CPUExecutionProvider")
+        provider_options.append({})
 
         self.session = ort.InferenceSession(
             onnx_path,
-            providers=[p for p in providers if p in available] or ["CPUExecutionProvider"],
+            sess_options=so,
+            providers=[p for p in selected_providers if p in available] or ["CPUExecutionProvider"],
+            provider_options=provider_options[: len([p for p in selected_providers if p in available])],
         )
         self.input_name = self.session.get_inputs()[0].name
         self.output_name = self.session.get_outputs()[0].name
@@ -212,4 +239,3 @@ class OnnxPlateOCR:
             pad_char=str(self.cfg.pad_char),
             return_confidence=return_confidence,
         )
-

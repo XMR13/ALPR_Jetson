@@ -97,6 +97,18 @@ python -m alpr_jetson e2e \
   --annotate-dir export/eval/e2e_vis
 ```
 
+ONNX OCR — Mode Memori (Jetson NX)
+- Maksimum performa (tanpa batas GPU):
+  - Tambahkan `--onnx-provider cuda --onnx-gpu-mem-limit-mb 0` (0 = tidak ada batasan)
+  - Contoh (E2E):
+    - `python -m alpr_jetson e2e --det-engine ... --onnx ... --plate-config ... --onnx-provider cuda --onnx-gpu-mem-limit-mb 0 --source ...`
+- Hemat memori (disarankan ketika terjadi OOM):
+  - Batasi alokasi CUDA EP, mis. 512–768 MB: `--onnx-provider cuda --onnx-gpu-mem-limit-mb 512`
+  - Atau pakai CPU: `--onnx-provider cpu` (lebih aman, lebih lambat)
+  - Kurangi jumlah deteksi agar OCR memproses lebih sedikit crop: tingkatkan `--conf` (mis. `--conf 0.6`)
+  - Hilangkan anotasi (hapus `--annotate-dir`) untuk mengurangi beban memori/I/O
+
+
 
 API (FastAPI) — Stub Endpoints
 - Server skeleton: `src/api_server/server.py` (import-safe tanpa FastAPI). Saat FastAPI tersedia, exposes:

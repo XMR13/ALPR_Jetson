@@ -10,6 +10,8 @@ def _add_ocr_backend_args(p: argparse.ArgumentParser) -> None:
     group.add_argument("--onnx", help="Path to OCR ONNX model (slot-based)")
     p.add_argument("--charset", help="Path to charset.txt (TensorRT only)")
     p.add_argument("--plate-config", help="YAML config for ONNX slot model")
+    p.add_argument("--onnx-provider", choices=["cuda", "cpu"], default="cuda", help="ONNXRuntime provider")
+    p.add_argument("--onnx-gpu-mem-limit-mb", type=int, default=768, help="Cap CUDA EP allocator (MB)")
     p.add_argument("--input-width", type=int, default=160, help="Model input width (TensorRT)")
     p.add_argument("--input-height", type=int, default=32, help="Model input height (TensorRT)")
     p.add_argument("--channels", type=int, default=1, help="Input channels (TensorRT)")
@@ -63,7 +65,13 @@ def _init_ocr_backend(args: argparse.Namespace):
             image_color_mode=str(cfg.get("image_color_mode", "rgb")),
             padding_color=cfg.get("padding_color", (144, 144, 144)),
         )
-        runner = OnnxPlateOCR(args.onnx, plate_cfg, prefer_trt=False)
+        runner = OnnxPlateOCR(
+            args.onnx,
+            plate_cfg,
+            prefer_trt=False,
+            provider=getattr(args, "onnx_provider", "cuda"),
+            gpu_mem_limit_mb=getattr(args, "onnx_gpu_mem_limit_mb", 768),
+        )
         return "onnx", runner
 
     engine_path = getattr(args, "engine", "")
