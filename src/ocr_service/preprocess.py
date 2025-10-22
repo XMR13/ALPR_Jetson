@@ -30,6 +30,7 @@ class PreprocConfig:
     std: Union[Number, Sequence[Number]] = 0.5
     clahe_clip: float = 2.0
     clahe_tile: int = 8
+    use_clahe: bool = True
     channels: int = 1  # 1 (default) for LPRNet-style, 3 for PaddleOCR models
 
 
@@ -125,7 +126,8 @@ def prepare_ocr_input(
     if polygon_xy is not None:
         img_bgr = rectify_polygon(img_bgr, polygon_xy, (cfg.input_height, cfg.input_width))
     gray = to_gray(img_bgr)
-    gray = clahe(gray, clip=cfg.clahe_clip, tile_grid=cfg.clahe_tile)
+    if cfg.use_clahe:
+        gray = clahe(gray, clip=cfg.clahe_clip, tile_grid=cfg.clahe_tile)
     x = resize_normalize_gray(gray, cfg)
     return x
 

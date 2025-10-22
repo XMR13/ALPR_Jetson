@@ -11,7 +11,7 @@ and returns placeholder outputs so the rest of the app can be developed.
 
 from __future__ import annotations
 
-from typing import Iterable, List, Optional, Sequence
+from typing import Iterable, List, Optional, Sequence, Tuple
 from pathlib import Path
 
 import numpy as np
@@ -121,6 +121,29 @@ def _ctc_greedy_decode(logits: np.ndarray, charset: List[str], blank_idx: int = 
     return out
 
 
+def _ctc_decode_from_indices(indices: np.ndarray, charset: List[str], blank_idx: int = 0) -> List[str]:
+    """CTC collapse given class indices [N,T]."""
+    if indices.ndim != 2:
+        raise ValueError(f"Expected [N,T] indices, got {indices.shape}")
+    N, T = indices.shape
+    out: List[str] = []
+    for n in range(N):
+        prev = -1
+        chars: List[str] = []
+        for t in range(T):
+            k = int(indices[n, t])
+            if k == blank_idx:
+                prev = -1
+                continue
+            if k == prev:
+                continue
+            prev = k
+            if 0 <= k < len(charset):
+                chars.append(charset[k])
+        out.append("".join(chars))
+    return out
+
+
 class OCRService:
     def __init__(
         self,
@@ -129,6 +152,7 @@ class OCRService:
         preproc: PreprocConfig = PreprocConfig(),
         logits_layout: str = "NTC",
         input_layout: str = "NCHW",
+        blank_index: int = 0,
     ) -> None:
         if logits_layout not in {"NTC", "NCT"}:
             raise ValueError("logits_layout must be 'NTC' or 'NCT'")
@@ -161,9 +185,13 @@ class OCRService:
         if self.input_layout == "NHWC":
             x = np.transpose(x, (0, 2, 3, 1))
         logits = self._runner.infer(x)
-        if logits.ndim != 3:
-            raise ValueError(f"Expected 3D logits, got shape {logits.shape}")
-        if self.logits_layout == "NCT":
-            logits = np.transpose(logits, (0, 2, 1))
-        texts = _ctc_greedy_decode(logits, self.charset)
+        # Some engines emit argmax indices [N,T]. Handle both cases.
+        if logits.ndim == 3:
+            if self.logits_layout == "NCT":
+                logits = np.transpose(logits, (0, 2, 1))
+            texts = _ctc_greedy_decode(logits, self.charset, blank_idx=0)
+        elif logits.ndim == 2:
+            texts = _ctc_decode_from_indices(logits.astype(np.int32), self.charset, blank_idx=0)
+        else:
+            raise ValueError(f"Expected 2D or 3D output, got shape {logits.shape}")
         return texts
