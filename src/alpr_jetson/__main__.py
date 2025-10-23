@@ -3,7 +3,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-
+#Menambahkan argumen untuk bakcend dari ocr
 def _add_ocr_backend_args(p: argparse.ArgumentParser) -> None:
     group = p.add_mutually_exclusive_group(required=True)
     group.add_argument("--engine", help="Path to OCR TensorRT .engine (CTC)")
@@ -32,6 +32,9 @@ def _add_ocr_backend_args(p: argparse.ArgumentParser) -> None:
 
 
 def _init_ocr_backend(args: argparse.Namespace):
+    """
+    Menginisiasi backend OCR berdasarkan argumen yang telah diberikan
+    """
     try:
         import yaml  # type: ignore
         from ocr_service.trt_infer import OCRService  # type: ignore
@@ -40,8 +43,9 @@ def _init_ocr_backend(args: argparse.Namespace):
     except Exception as exc:  # pragma: no cover
         raise RuntimeError(f"OCR dependencies missing: {exc}") from exc
 
+    #jika ingin melakukan inferenc dengan onnx maka perlu menambahkan beberapa konfigurasi tambahan
     if getattr(args, "onnx", None):
-        cfg_path = getattr(args, "plate_config", "")
+        cfg_path = getattr(args, "plate_config", "") #plate config argumen jika menggunakan onnx
         if not cfg_path:
             raise ValueError("--plate-config is required when using --onnx")
         try:
@@ -50,7 +54,7 @@ def _init_ocr_backend(args: argparse.Namespace):
         except Exception as exc:
             raise ValueError(f"failed to read plate config: {exc}") from exc
 
-        required = ["max_plate_slots", "alphabet", "pad_char", "img_height", "img_width"]
+        required = ["max_plate_slots", "alphabet", "pad_char", "img_height", "img_width"] #argumen wajib yang perlu dimasukkan
         missing = [k for k in required if k not in cfg]
         if missing:
             raise ValueError(f"missing keys in plate config: {', '.join(missing)}")
@@ -79,9 +83,10 @@ def _init_ocr_backend(args: argparse.Namespace):
             gpu_mem_limit_mb=getattr(args, "onnx_gpu_mem_limit_mb", 768),
         )
         return "onnx", runner
-
+    
+    #apabila ingin menggunakan infernce dengan tensor Rt maka maksukkan argumen --engine
     engine_path = getattr(args, "engine", "")
-    charset = getattr(args, "charset", "")
+    charset = getattr(args, "charset", "")  #tambahan arguemn yang diberikan jika ingin menggunakan tensorRT sebagai inferrence
     if not engine_path:
         raise ValueError("--engine is required when --onnx is not provided")
     if not charset:
@@ -104,7 +109,7 @@ def _init_ocr_backend(args: argparse.Namespace):
     )
     return "trt", svc
 
-
+#inference hanya untuk OCR
 def cmd_ocr_infer(args: argparse.Namespace) -> int:
     """Infer OCR text for an image or all images in a directory.
 
@@ -154,6 +159,92 @@ def cmd_ocr_infer(args: argparse.Namespace) -> int:
             for p, t in results:
                 w.writerow([p, t])
         print(f"wrote: {args.output}")
+    return 0
+
+#inference hanya utnuk deteksi plat sajaq
+def cmd_det_infer(args: argparse.Namespace) -> int:
+    """Run detector only (no OCR) on an image or directory."""
+    try:
+        import glob
+        from typing import List
+        import cv2  # type: ignore
+        from inference.yolov9_trt import load_engine, infer_image  # type: ignore
+    except Exception as exc:
+        print(f"Detector runtime dependencies missing: {exc}", file=sys.stderr)
+        return 2
+
+    if not (0.0 <= args.iou <= 1.0):
+        print("--iou must be in [0,1]", file=sys.stderr)
+        return 2
+
+    labels = None
+    if args.labels:
+        try:
+            with open(args.labels, "r", encoding="utf-8") as f:
+                labels = [line.strip() for line in f if line.strip()]
+        except Exception as exc:
+            print(f"failed to read labels file: {exc}", file=sys.stderr)
+            return 2
+
+    try:
+        det_engine = load_engine(args.det_engine, print_plugins=args.print_plugins)
+    except Exception as exc:
+        print(f"failed to load detector engine: {exc}", file=sys.stderr)
+        return 2
+
+    paths: List[str] = []
+    src = Path(args.source)
+    if src.is_dir():
+        for ext in ("*.jpg", "*.jpeg", "*.png", "*.bmp"):
+            paths.extend(sorted(glob.glob(str(src / ext))))
+    else:
+        paths = [str(src)]
+    if not paths:
+        print("no input images found", file=sys.stderr)
+        return 2
+
+    annotate_dir = Path(args.annotate_dir) if args.annotate_dir else None
+    if annotate_dir:
+        annotate_dir.mkdir(parents=True, exist_ok=True)
+
+    for img_path in paths:
+        try:
+            img0, dets = infer_image(det_engine, img_path, conf=args.conf, iou=args.iou)
+        except Exception as exc:
+            print(f"failed detection on {img_path}: {exc}", file=sys.stderr)
+            continue
+
+        print(img_path)
+        if dets:
+            for idx, (bbox, score, cls) in enumerate(dets):
+                label = str(cls)
+                if labels and 0 <= cls < len(labels):
+                    label = labels[cls]
+                print(f"  det#{idx}: conf={score:.2f} cls={label} bbox={tuple(int(v) for v in bbox)}")
+        else:
+            print("  no detections above threshold")
+
+        if annotate_dir:
+            annotated = img0.copy()
+            for (x1, y1, x2, y2), score, cls in dets:
+                name = str(cls)
+                if labels and 0 <= cls < len(labels):
+                    name = labels[cls]
+                cv2.rectangle(annotated, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
+                cv2.putText(
+                    annotated,
+                    f"{name}:{score:.2f}",
+                    (int(x1), max(0, int(y1) - 6)),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    (0, 255, 0),
+                    1,
+                    cv2.LINE_AA,
+                )
+            out_path = annotate_dir / (Path(img_path).stem + "_det.jpg")
+            cv2.imwrite(str(out_path), annotated)
+            print(f"  annotated: {out_path}")
+
     return 0
 
 
@@ -326,6 +417,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_ocr.add_argument("--postproc", choices=["none", "indonesia"], default="none", help="Apply plate post-processing")
     p_ocr.add_argument("--allowed-prefix", nargs="*", default=["A","B","D","F","E","Z","T"], help="Allowed region prefixes for postproc")
     p_ocr.set_defaults(func=cmd_ocr_infer)
+
+    p_det = sub.add_parser("det-infer", help="Run detector on images (no OCR)")
+    p_det.add_argument("--det-engine", required=True, help="Path to detector TensorRT .engine")
+    p_det.add_argument("--source", required=True, help="Image file or directory")
+    p_det.add_argument("--conf", type=float, default=0.5, help="Detection confidence threshold")
+    p_det.add_argument("--iou", type=float, default=0.45, help="Detection IoU threshold")
+    p_det.add_argument("--labels", default="", help="Optional class labels file (one name per line)")
+    p_det.add_argument("--annotate-dir", default="", help="Directory to save annotated detections")
+    p_det.add_argument("--print-plugins", action="store_true", help="Print TensorRT plugin registry before loading engine")
+    p_det.set_defaults(func=cmd_det_infer)
 
     p_e2e = sub.add_parser("e2e", help="Run detector + OCR on images")
     p_e2e.add_argument("--det-engine", required=True, help="Path to detector TensorRT .engine")

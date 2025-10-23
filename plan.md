@@ -250,6 +250,7 @@ Status:
 * **E2E test**: RTSP → DS (YOLOv9 LPD → OCR) → API; dump events for 1–2 hours.
 * Lightweight offline validation: CLI `python -m alpr_jetson e2e` to run detector+OCR on still images before DS wiring.
 * Resource tuning on Jetson NX: expose ONNXRuntime provider choice (CUDA/CPU) and configurable CUDA allocator cap to prevent OOM during E2E runs; document recommended flags (e.g., `--onnx-provider cuda --onnx-gpu-mem-limit-mb 512`).
+* Add synchronous `/v1/alpr` HTTP endpoint (multipart) for integration tests; reuse detector/OCR runtimes with shared token auth and Prometheus counters.
 * Acceptance for this milestone: initial exact‑match plate accuracy; p95 end‑to‑end latency < 80 ms; `/healthz` and `/metrics` expose FPS and queue depth.
 
 Status:
