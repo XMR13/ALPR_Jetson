@@ -5,7 +5,7 @@
 # - LATENCY_MS is GStreamer rtspsrc latency; tune per jitter
 # - DECODE_CAPS helps DeepStream/GStreamer negotiate H264/H265
 
-RTSP_URI=rtsp://admin:cctv123456@172.16.169.2
+RTSP_URI=rtsp://admin:cctv123456@172.16.169.2 (temporary stream)
 RECONNECT_MAX_RETRIES=0
 RECONNECT_INTERVAL_MS=2000
 LATENCY_MS=200

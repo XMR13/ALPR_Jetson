@@ -1,20 +1,43 @@
 # ALPR Jetson — YOLOv9 Detector
 
-Repo ini menggunakan YOLOv9 (TensorRT) sebagai detektor plat utama.
+Repo ini menggunakan YOLOv9 (TensorRT) sebagai detektor plat utama dan menyediakan
+CLI terpadu `python -m alpr_jetson` (atau `uv run python -m alpr_jetson`) untuk
+uji cepat:
 
-Penempatan artefak model:
-- ONNX: `models/detector/yolov9-s_plate.onnx`
-- TensorRT FP16: `models/detector/yolov9-s_plate_fp16.engine`
-- Skrip inferensi TensorRT: modul reusable `src/inference/yolov9_trt.py` dengan CLI `tools/infer_yolov9_trt.py`.
+- **Detector-only** (`det-infer`): jalankan YOLOv9 TRT tanpa OCR, dengan opsi anotasi keluaran.
+- **OCR-only** (`ocr-infer`): gunakan TensorRT **atau** ONNX slot-based OCR pada folder/gambar.
+- **End-to-end** (`e2e`): detektor + OCR sekaligus dengan opsi teks-only / simpan anotasi.
+- **Smoke tests**: `rtsp-smoke` (GStreamer) dan `ds-smoke` (DeepStream).
 
-Jalankan inferensi lokal dari snapshot gambar:
+Contoh cepat (gunakan `PYTHONPATH=src` bila belum `pip install -e .`):
 
 ```bash
-python tools/infer_yolov9_trt.py \
-  --engine models/detector/yolov9-s_plate_fp16.engine \
+# Detector only, simpan anotasi
+python -m alpr_jetson det-infer \
+  --det-engine models/detector/yolov9-s_plate_fp16.engine \
   --source data/raw/cam01/frame.jpg \
+  --annotate-dir export/det_vis \
   --conf 0.4
+
+# OCR saja (TensorRT CTC)
+python -m alpr_jetson ocr-infer \
+  --engine models/ocr/ppo_crnn_fp16.engine \
+  --charset models/ocr/charset.txt \
+  --source data/labeled/ocr_crops/
+
+# OCR slot-based ONNX (gunakan YAML PlateConfig)
+python -m alpr_jetson ocr-infer \
+  --onnx models/ocr/cct_s_v1_global.onnx \
+  --plate-config models/ocr/cct_s_v1_global_plate_config.yaml \
+  --source data/labeled/ocr_crops/ \
+  --onnx-provider cuda \
+  --onnx-gpu-mem-limit-mb 512
 ```
+
+Penempatan artefak model:
+- ONNX detektor: `models/detector/yolov9-s_plate.onnx`
+- TensorRT FP16 detektor: `models/detector/yolov9-s_plate_fp16.engine`
+- TensorRT / ONNX OCR: `models/ocr/…`
 
 Evaluasi detektor (COCO AP):
 

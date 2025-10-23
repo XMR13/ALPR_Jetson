@@ -236,10 +236,12 @@ Status (as of 2025-10-22):
 
 * Add **rectification**: if 4-corner polygon available, compute homography; else min‑area rect.
 * Add **CLAHE**, grayscale, resize to OCR input size.
+* Instrument OCR quality: add CER/SER tooling for validation crops, log low-confidence snapshots, and surface metrics in progress logs.
 
 Status:
 - CLAHE/grayscale/resize in `src/ocr_service/preprocess.py` [done].
 - Rectification helper present but not yet used E2E [partial].
+- CER/SER evaluator and low-confidence snapshot capture [open].
 
 **Day 12–13**
 
@@ -264,6 +266,7 @@ Status:
 
 * Active learning loop: auto‑score low‑conf plates; append **+2k frames** and **+5k OCR crops**. Retrain detector.
 * Implement **temporal majority voting** and **regex‑constrained correction** with edit distance.
+* Expand dataset for multi-camera coverage: balance training/validation splits by `camera_id`, seed collection for new viewpoints, and document gaps.
 
 **Day 17–18**
 
@@ -281,6 +284,7 @@ Status:
 
 * Add **healthz** and **metrics** to API; include FPS, queue depth, GPU util, last frame ts. (Note: stubs exist earlier; extend with real metrics here.)
 * Write **systemd units** for the three services; configure `Restart=always`, `WatchdogSec=30`.
+* Implement structured JSON logging with per-stage latency, integrate tegrastats sampling, and configure log rotation/retention (Jetson-compliant).
 
 **Day 23–24**
 
@@ -297,18 +301,20 @@ Status:
 **Day 27–28**
 
 * Collect **validation set**: 1 full day (day+night) with operator notes. Freeze versions in `models/`.
-* Measure metrics with `tools/eval_e2e.py` (exact‑match, CER, SER, latency p50/p95).
+* Measure metrics with `tools/eval_e2e.py` (exact-match, CER, SER, latency p50/p95).
+* Report detector/OCR metrics per camera to confirm generalization; flag domains needing more data.
 
 ### Week 6 — Final Polish
 
 **Day 29–31**
 
-* Fix last mile errors; tune post‑proc costs (e.g., `O→0` cost 0.2, `I→1` 0.2, others 1.0).
+* Fix last mile errors; tune post-proc costs (e.g., `O→0` cost 0.2, `I→1` 0.2, others 1.0).
 * Write **OPS_RUNBOOK.md**: start/stop, common failure signatures, recovery checklist.
+* Deliver documentation pack: setup guide, API reference, training notes, multi-camera expansion playbook, and logging/monitoring SOP.
 
 **Day 32–34** (buffer or expansion)
 
-* Prepare scale‑out template for N cameras (see §10). Handoff pack: configs, models, docs.
+* Prepare scale-out template for N cameras (see §10). Handoff pack: configs, models, docs.
 
 ---
 
