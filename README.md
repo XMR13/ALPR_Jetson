@@ -4,7 +4,7 @@ Repo ini menggunakan YOLOv9 (TensorRT) sebagai detektor plat utama dan menyediak
 CLI terpadu `python -m alpr_jetson` (atau `uv run python -m alpr_jetson`) untuk
 uji cepat:
 
-- **Detector-only** (`det-infer`): jalankan YOLOv9 TRT tanpa OCR, dengan opsi anotasi keluaran.
+- **Detector-only** (`det-infer`): jalankan YOLOv9 TRT tanpa OCR, dengan opsi anotasi keluaran dan ekspor crop plat.
 - **OCR-only** (`ocr-infer`): gunakan TensorRT **atau** ONNX slot-based OCR pada folder/gambar.
 - **End-to-end** (`e2e`): detektor + OCR sekaligus dengan opsi teks-only / simpan anotasi.
 - **Smoke tests**: `rtsp-smoke` (GStreamer) dan `ds-smoke` (DeepStream).
@@ -12,11 +12,12 @@ uji cepat:
 Contoh cepat (gunakan `PYTHONPATH=src` bila belum `pip install -e .`):
 
 ```bash
-# Detector only, simpan anotasi
+# Detector only, simpan anotasi + crop plat
 python -m alpr_jetson det-infer \
   --det-engine models/detector/yolov9-s_plate_fp16.engine \
   --source data/raw/cam01/frame.jpg \
   --annotate-dir export/det_vis \
+  --crop-dir export/det_crops \
   --conf 0.4
 
 # OCR saja (TensorRT CTC)

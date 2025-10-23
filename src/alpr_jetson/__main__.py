@@ -161,7 +161,7 @@ def cmd_ocr_infer(args: argparse.Namespace) -> int:
         print(f"wrote: {args.output}")
     return 0
 
-#inference hanya utnuk deteksi plat sajaq
+# inference hanya untuk deteksi plat saja
 def cmd_det_infer(args: argparse.Namespace) -> int:
     """Run detector only (no OCR) on an image or directory."""
     try:
@@ -206,6 +206,9 @@ def cmd_det_infer(args: argparse.Namespace) -> int:
     annotate_dir = Path(args.annotate_dir) if args.annotate_dir else None
     if annotate_dir:
         annotate_dir.mkdir(parents=True, exist_ok=True)
+    crop_dir = Path(args.crop_dir) if getattr(args, "crop_dir", "") else None
+    if crop_dir:
+        crop_dir.mkdir(parents=True, exist_ok=True)
 
     for img_path in paths:
         try:
@@ -214,27 +217,29 @@ def cmd_det_infer(args: argparse.Namespace) -> int:
             print(f"failed detection on {img_path}: {exc}", file=sys.stderr)
             continue
 
-        print(img_path)
-        if dets:
-            for idx, (bbox, score, cls) in enumerate(dets):
-                label = str(cls)
-                if labels and 0 <= cls < len(labels):
-                    label = labels[cls]
-                print(f"  det#{idx}: conf={score:.2f} cls={label} bbox={tuple(int(v) for v in bbox)}")
-        else:
-            print("  no detections above threshold")
+        det_info = []
+        for idx, (bbox, score, cls) in enumerate(dets):
+            x1, y1, x2, y2 = [int(round(v)) for v in bbox]
+            label = str(cls)
+            if labels and 0 <= cls < len(labels):
+                label = labels[cls]
+            det_info.append((idx, (x1, y1, x2, y2), float(score), label))
 
-        if annotate_dir:
+        print(img_path)
+        if not det_info:
+            print("  no detections above threshold")
+        else:
+            for idx, (x1, y1, x2, y2), score, label in det_info:
+                print(f"  det#{idx}: conf={score:.2f} cls={label} bbox={(x1, y1, x2, y2)}")
+
+        if annotate_dir and det_info:
             annotated = img0.copy()
-            for (x1, y1, x2, y2), score, cls in dets:
-                name = str(cls)
-                if labels and 0 <= cls < len(labels):
-                    name = labels[cls]
-                cv2.rectangle(annotated, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
+            for idx, (x1, y1, x2, y2), score, label in det_info:
+                cv2.rectangle(annotated, (x1, y1), (x2, y2), (0, 255, 0), 2)
                 cv2.putText(
                     annotated,
-                    f"{name}:{score:.2f}",
-                    (int(x1), max(0, int(y1) - 6)),
+                    f"{label}:{score:.2f}",
+                    (x1, max(0, y1 - 6)),
                     cv2.FONT_HERSHEY_SIMPLEX,
                     0.5,
                     (0, 255, 0),
@@ -244,6 +249,15 @@ def cmd_det_infer(args: argparse.Namespace) -> int:
             out_path = annotate_dir / (Path(img_path).stem + "_det.jpg")
             cv2.imwrite(str(out_path), annotated)
             print(f"  annotated: {out_path}")
+
+        if crop_dir and det_info:
+            for idx, (x1, y1, x2, y2), score, label in det_info:
+                crop = img0[y1:y2, x1:x2]
+                if crop.size == 0:
+                    continue
+                crop_path = crop_dir / f"{Path(img_path).stem}_det{idx}.jpg"
+                cv2.imwrite(str(crop_path), crop)
+                print(f"  crop saved: {crop_path}")
 
     return 0
 
@@ -425,6 +439,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_det.add_argument("--iou", type=float, default=0.45, help="Detection IoU threshold")
     p_det.add_argument("--labels", default="", help="Optional class labels file (one name per line)")
     p_det.add_argument("--annotate-dir", default="", help="Directory to save annotated detections")
+    p_det.add_argument("--crop-dir", default="", help="Directory to export plate crops for each detection")
     p_det.add_argument("--print-plugins", action="store_true", help="Print TensorRT plugin registry before loading engine")
     p_det.set_defaults(func=cmd_det_infer)
 
