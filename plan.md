@@ -225,10 +225,21 @@ alpr-indonesia/
 * If keeping a microservice: define/confirm `src/ocr_service/` interfaces to accept crops and return text+confidences; otherwise, pass text via DeepStream metadata.
 * Provide ONNXRuntime fallback (slot-based decoder + YAML config) for rapid prototyping on workstation; expose via CLI flag.
 
+Status (as of 2025-10-22):
+- OCR runtime integrated: ONNX (CUDA/CPU with GPU mem cap) [done]; TensorRT wrapper present [done].
+- Sanity on validation crops [partial; logging to be added in progress/].
+- Microservice interface sketched in `src/ocr_service/app.py` [partial].
+- ONNXRuntime fallback exposed via CLI [done].
+\- ONNX ONNX-side preprocessing upgrades: keep-aspect letterbox defaults, optional brightness-gated CLAHE, and optional deskew [done].
+
 **Day 10–11**
 
 * Add **rectification**: if 4-corner polygon available, compute homography; else min‑area rect.
 * Add **CLAHE**, grayscale, resize to OCR input size.
+
+Status:
+- CLAHE/grayscale/resize in `src/ocr_service/preprocess.py` [done].
+- Rectification helper present but not yet used E2E [partial].
 
 **Day 12–13**
 
@@ -238,6 +249,14 @@ alpr-indonesia/
 * Lightweight offline validation: CLI `python -m alpr_jetson e2e` to run detector+OCR on still images before DS wiring.
 * Resource tuning on Jetson NX: expose ONNXRuntime provider choice (CUDA/CPU) and configurable CUDA allocator cap to prevent OOM during E2E runs; document recommended flags (e.g., `--onnx-provider cuda --onnx-gpu-mem-limit-mb 512`).
 * Acceptance for this milestone: initial exact‑match plate accuracy; p95 end‑to‑end latency < 80 ms; `/healthz` and `/metrics` expose FPS and queue depth.
+
+Status:
+- DS → OCR crop transport [open]. Baseline to start with HTTP; ZeroMQ/IPC as target.
+- API endpoints scaffolded in `src/api_server/server.py` [partial]; persistence (SQLite + snapshots) [open].
+- Offline E2E on images implemented (`python -m alpr_jetson e2e`) [done].
+- Resource tuning flags implemented and documented [done].
+- New tooling: e2e text-only output option (stdout or file) [done].
+- Acceptance pending: requires live RTSP E2E and metrics wiring [open].
 
 ### Week 3 — Quality Push I
 
@@ -260,7 +279,7 @@ alpr-indonesia/
 
 **Day 21–22**
 
-* Add **healthz** and **metrics** to API; include FPS, queue depth, GPU util, last frame ts.
+* Add **healthz** and **metrics** to API; include FPS, queue depth, GPU util, last frame ts. (Note: stubs exist earlier; extend with real metrics here.)
 * Write **systemd units** for the three services; configure `Restart=always`, `WatchdogSec=30`.
 
 **Day 23–24**

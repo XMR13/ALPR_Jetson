@@ -46,6 +46,28 @@ OCR (CRNN/Paddle-style) — Preproc & Service
 - OCR runtime:
   - TensorRT CTC: `src/ocr_service/trt_infer.py`
   - ONNX slot-based (misal CCT-S): `src/ocr_service/onnx_infer.py` + konfigurasi YAML (`models/ocr/cct_s_v1_global_plate_config.yaml`).
+    - Rekomendasi default untuk Jetson NX (menjaga bentuk huruf dan stabil di malam hari):
+
+```yaml
+# contoh PlateConfig YAML (ONNX)
+max_plate_slots: 9
+alphabet: " 0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"  # pastikan pad_char ada di alphabet
+pad_char: " "
+img_height: 32
+img_width: 160
+keep_aspect_ratio: true
+image_color_mode: grayscale
+interpolation: area
+padding_color: 144
+
+# opsional: aktifkan hanya jika perlu
+use_clahe: false                 # true untuk malam/gelap
+clahe_clip: 2.0
+clahe_tile: 8
+clahe_brightness_gate: 110.0     # jalankan CLAHE hanya jika mean<110 (0=selalu)
+auto_deskew: false               # true bila kemiringan sering >12°
+deskew_threshold_deg: 12.0
+```
 - FastAPI microservice stub: `src/ocr_service/app.py` (opsional; butuh FastAPI terpasang).
 - Pelatihan & ekspor OCR: lihat `docs/OCR_MODEL.md` untuk panduan PaddleOCR → ONNX → TensorRT, termasuk target akurasi dan layout model.
 - Evaluasi akurasi OCR: `tools/eval_ocr.py --engine ... --charset ... --crops ... --labels ...` menghitung exact-match dan CER.
@@ -97,6 +119,31 @@ python -m alpr_jetson e2e \
   --annotate-dir export/eval/e2e_vis
 ```
 
+Output teks saja (opsional) untuk e2e:
+
+- Tampilkan hanya teks plat (satu per baris), tanpa output lain:
+
+```bash
+python -m alpr_jetson e2e \
+  --det-engine models/detector/yolov9-s_plate_fp16.engine \
+  --onnx models/ocr/cct_s_v1_global.onnx \
+  --plate-config models/ocr/cct_s_v1_global_plate_config.yaml \
+  --source data/raw/cam01/frames \
+  --text-only
+```
+
+- Simpan semua teks plat ke file (satu baris per plat), sambil tetap menyimpan anotasi jika diminta:
+
+```bash
+python -m alpr_jetson e2e \
+  --det-engine models/detector/yolov9-s_plate_fp16.engine \
+  --onnx models/ocr/cct_s_v1_global.onnx \
+  --plate-config models/ocr/cct_s_v1_global_plate_config.yaml \
+  --source data/raw/cam01/frames \
+  --annotate-dir export/eval/e2e_vis \
+  --text-out export/eval/e2e_texts.txt
+```
+
 ONNX OCR — Mode Memori (Jetson NX)
 - Maksimum performa (tanpa batas GPU):
   - Tambahkan `--onnx-provider cuda --onnx-gpu-mem-limit-mb 0` (0 = tidak ada batasan)
@@ -107,6 +154,11 @@ ONNX OCR — Mode Memori (Jetson NX)
   - Atau pakai CPU: `--onnx-provider cpu` (lebih aman, lebih lambat)
   - Kurangi jumlah deteksi agar OCR memproses lebih sedikit crop: tingkatkan `--conf` (mis. `--conf 0.6`)
   - Hilangkan anotasi (hapus `--annotate-dir`) untuk mengurangi beban memori/I/O
+
+ONNX OCR — Peningkatan Kualitas
+- Default yang disarankan: `keep_aspect_ratio=true`, `image_color_mode=grayscale`, `interpolation=area`.
+- `use_clahe=true` hanya untuk kondisi gelap/glare; gunakan `clahe_brightness_gate` agar aktif otomatis saat gelap.
+- `auto_deskew=true` bila sering ada tilt besar; akan diterapkan hanya jika |angle| ≥ `deskew_threshold_deg`.
 
 
 

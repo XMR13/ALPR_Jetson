@@ -32,8 +32,8 @@ except Exception as e:  # pragma: no cover
 _INTERP = {
     "nearest": cv2.INTER_NEAREST,
     "linear": cv2.INTER_LINEAR,
-    "cubic": cv2.INTER_CUBIC,
     "area": cv2.INTER_AREA,
+    "cubic": cv2.INTER_CUBIC,
     "lanczos4": cv2.INTER_LANCZOS4,
 }
 
@@ -157,6 +157,14 @@ class PlateConfig:
     interpolation: str = "linear"
     image_color_mode: str = "rgb"  # or "grayscale"
     padding_color: Sequence[int] | int = (144, 144, 144)
+    # Optional preprocessing (grayscale mode recommended for these)
+    use_clahe: bool = False
+    clahe_clip: float = 2.0
+    clahe_tile: int = 8
+    # Apply CLAHE only if mean brightness < gate (0 disables gating)
+    clahe_brightness_gate: float = 0.0  # 0..255
+    auto_deskew: bool = False
+    deskew_threshold_deg: float = 12.0
 
 
 class OnnxPlateOCR:
@@ -212,9 +220,50 @@ class OnnxPlateOCR:
         self.cfg = plate_cfg
 
     def _preprocess_one(self, img: np.ndarray) -> np.ndarray:
-        img = _ensure_color_mode(img, self.cfg.image_color_mode)
-        img = _resize_letterbox(
-            img,
+        mode = self.cfg.image_color_mode
+        img1 = _ensure_color_mode(img, mode)
+
+        # Optional deskew + CLAHE (grayscale only)
+        if mode.lower() == "grayscale":
+            gray = img1 if img1.ndim == 2 else cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY)
+
+            # Auto deskew by minAreaRect orientation if requested
+            if bool(self.cfg.auto_deskew):
+                try:
+                    g = cv2.GaussianBlur(gray, (3, 3), 0)
+                    _, bw = cv2.threshold(g, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+                    contours, _ = cv2.findContours(255 - bw, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                    if contours:
+                        cnt = max(contours, key=cv2.contourArea)
+                        rect = cv2.minAreaRect(cnt)
+                        angle = rect[-1]
+                        # cv2 returns angle in [-90,0); convert to small tilt around 0
+                        if angle < -45:
+                            angle = angle + 90
+                        if abs(angle) >= float(self.cfg.deskew_threshold_deg) and abs(angle) <= 30.0:
+                            h, w = gray.shape[:2]
+                            M = cv2.getRotationMatrix2D((w / 2.0, h / 2.0), angle, 1.0)
+                            gray = cv2.warpAffine(gray, M, (w, h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+                except Exception:
+                    # Fail-safe: ignore deskew errors
+                    pass
+
+            # CLAHE with optional brightness gate
+            if bool(self.cfg.use_clahe):
+                try:
+                    mean = float(gray.mean())
+                    gate = float(self.cfg.clahe_brightness_gate or 0.0)
+                    if gate <= 0.0 or mean < gate:
+                        clahe = cv2.createCLAHE(clipLimit=float(self.cfg.clahe_clip), tileGridSize=(int(self.cfg.clahe_tile), int(self.cfg.clahe_tile)))
+                        gray = clahe.apply(gray.astype(np.uint8))
+                except Exception:
+                    pass
+
+            img1 = gray
+
+        # Resize/letterbox to model input
+        img2 = _resize_letterbox(
+            img1,
             target_h=int(self.cfg.img_height),
             target_w=int(self.cfg.img_width),
             image_color_mode=self.cfg.image_color_mode,
@@ -222,9 +271,9 @@ class OnnxPlateOCR:
             interpolation=self.cfg.interpolation,
             padding_color=self.cfg.padding_color,
         )
-        if self.cfg.image_color_mode.lower() == "grayscale" and img.ndim == 2:
-            img = img[:, :, None]
-        return img.astype(np.uint8)
+        if self.cfg.image_color_mode.lower() == "grayscale" and img2.ndim == 2:
+            img2 = img2[:, :, None]
+        return img2.astype(np.uint8)
 
     def infer_batch(self, images_bgr: Iterable[np.ndarray], return_confidence: bool = False):
         imgs = list(images_bgr)

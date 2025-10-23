@@ -60,10 +60,16 @@ def _init_ocr_backend(args: argparse.Namespace):
             pad_char=str(cfg["pad_char"]),
             img_height=int(cfg["img_height"]),
             img_width=int(cfg["img_width"]),
-            keep_aspect_ratio=bool(cfg.get("keep_aspect_ratio", False)),
-            interpolation=str(cfg.get("interpolation", "linear")),
-            image_color_mode=str(cfg.get("image_color_mode", "rgb")),
+            keep_aspect_ratio=bool(cfg.get("keep_aspect_ratio", True)),
+            interpolation=str(cfg.get("interpolation", "area")),
+            image_color_mode=str(cfg.get("image_color_mode", "grayscale")),
             padding_color=cfg.get("padding_color", (144, 144, 144)),
+            use_clahe=bool(cfg.get("use_clahe", False)),
+            clahe_clip=float(cfg.get("clahe_clip", 2.0)),
+            clahe_tile=int(cfg.get("clahe_tile", 8)),
+            clahe_brightness_gate=float(cfg.get("clahe_brightness_gate", 0.0)),
+            auto_deskew=bool(cfg.get("auto_deskew", False)),
+            deskew_threshold_deg=float(cfg.get("deskew_threshold_deg", 12.0)),
         )
         runner = OnnxPlateOCR(
             args.onnx,
@@ -208,6 +214,8 @@ def cmd_e2e(args: argparse.Namespace) -> int:
     if annotate_dir:
         annotate_dir.mkdir(parents=True, exist_ok=True)
 
+    text_lines = []  # collect final plate texts for --text-out / --text-only
+
     for img_path in paths:
         try:
             img0, dets = infer_image(det_engine, img_path, conf=args.conf, iou=args.iou)
@@ -235,22 +243,37 @@ def cmd_e2e(args: argparse.Namespace) -> int:
 
         texts = ocr_runner.infer_batch(crops) if crops else []  # type: ignore[arg-type]
 
-        print(f"{img_path}")
-        for idx, (bbox, det_score) in enumerate(zip(boxes, scores)):
-            text = texts[idx] if idx < len(texts) else ""
-            final = text
-            if args.postproc == "indonesia" and text:
-                final, _ = postprocess_indonesia(text, allowed_prefix=args.allowed_prefix or None)
-            print(f"  det#{idx}: conf={det_score:.2f} plate='{final}' bbox={bbox}")
-        if not boxes:
-            print("  no detections above threshold")
+        # Prepare final texts (optionally postprocessed)
+        final_texts = []
+        for idx in range(len(boxes)):
+            t = texts[idx] if idx < len(texts) else ""
+            if args.postproc == "indonesia" and t:
+                t, _ = postprocess_indonesia(t, allowed_prefix=args.allowed_prefix or None)
+            final_texts.append(t)
+
+        # Emit output depending on flags
+        if args.text_only:
+            for t in final_texts:
+                if t:
+                    print(t)
+                    text_lines.append(t)
+            # If no detections, print nothing in text-only mode
+        else:
+            print(f"{img_path}")
+            for idx, (bbox, det_score) in enumerate(zip(boxes, scores)):
+                label = final_texts[idx] if idx < len(final_texts) else ""
+                print(f"  det#{idx}: conf={det_score:.2f} plate='{label}' bbox={bbox}")
+            if not boxes:
+                print("  no detections above threshold")
+            # Also collect plain texts for optional --text-out
+            for t in final_texts:
+                if t:
+                    text_lines.append(t)
 
         if annotate_dir:
             annotated = img0.copy()
             for idx, ((x1, y1, x2, y2), det_score) in enumerate(zip(boxes, scores)):
-                label = texts[idx] if idx < len(texts) else ""
-                if args.postproc == "indonesia" and label:
-                    label, _ = postprocess_indonesia(label, allowed_prefix=args.allowed_prefix or None)
+                label = final_texts[idx] if idx < len(final_texts) else ""
                 cv2.rectangle(annotated, (x1, y1), (x2, y2), (0, 255, 0), 2)
                 cv2.putText(
                     annotated,
@@ -265,6 +288,20 @@ def cmd_e2e(args: argparse.Namespace) -> int:
             out_path = annotate_dir / (Path(img_path).stem + "_alpr.jpg")
             cv2.imwrite(str(out_path), annotated)
             print(f"  annotated: {out_path}")
+
+    # If requested, write plain plate texts to a file (one per line)
+    if getattr(args, "text_out", ""):
+        try:
+            outp = Path(args.text_out)
+            outp.parent.mkdir(parents=True, exist_ok=True)
+            with open(outp, "w", encoding="utf-8") as f:
+                for line in text_lines:
+                    f.write(f"{line}\n")
+            if not args.text_only:
+                print(f"wrote plate texts: {outp}")
+        except Exception as exc:
+            print(f"failed to write --text-out file: {exc}", file=sys.stderr)
+            return 2
 
     return 0
 
@@ -296,6 +333,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_e2e.add_argument("--conf", type=float, default=0.5, help="Detection confidence threshold")
     p_e2e.add_argument("--iou", type=float, default=0.45, help="Detection IoU threshold")
     p_e2e.add_argument("--annotate-dir", default="", help="Optional directory to save annotated outputs")
+    p_e2e.add_argument("--text-only", action="store_true", help="Print only plate texts (one per line)")
+    p_e2e.add_argument("--text-out", default="", help="Optional path to write plate texts (one per line)")
     _add_ocr_backend_args(p_e2e)
     p_e2e.add_argument("--postproc", choices=["none", "indonesia"], default="indonesia", help="Apply plate post-processing")
     p_e2e.add_argument("--allowed-prefix", nargs="*", default=["A","B","D","F","E","Z","T"], help="Allowed prefixes for postproc")
