@@ -12,6 +12,15 @@
 * **Interfaces:** HTTP + WebSocket API; optional Kafka/MQTT broker events; schema versioned.
 * **Privacy/Safety:** redact faces on exported snapshots when needed; store only required data; rotate logs.
 
+### Runtime Environment Guardrails (Jetson NX)
+
+- Python version on target must be 3.8.x (≥3.8,<3.9). Keep developer machines flexible, but validate against 3.8.
+- Prefer system OpenCV on Jetson (L4T/apt). Do not install `opencv-python` wheels on Jetson.
+- Separate dependency profiles:
+  - Development: full tooling (FastAPI, pytest, matplotlib), OK on x86_64.
+  - Jetson runtime: minimal (FastAPI, PyYAML, uvicorn), avoid heavy/compiled wheels when system libs exist.
+- Provide constraints files and document installation steps in README and `deploy/` notes.
+
 ---
 
 ## 1) What We’re Building (High-Level)
@@ -186,12 +195,16 @@ alpr-indonesia/
 * Flash NX to **JetPack 5.1.5**; enable SSH. Verify `nvcc --version`, `trtexec --version`.
 * Set performance mode: `sudo nvpmodel -m 0 && sudo jetson_clocks`.
 * Install Docker + NVIDIA runtime; create user `alpr` with dialout/video groups.
+* Verify Python 3.8.x on target (`python3 --version`). Pin project runtime to 3.8 on Jetson.
+* Create `requirements-jetson.txt` and `constraints-jetson.txt` (see §19) with runtime-safe deps.
+  * Status 2025-10-24: requirements-jetson.txt and constraints-jetson.txt added to repo [done].
 
 **Day 2**
 
 * Pull DeepStream L4T container image matching JP 5.1.5; confirm `deepstream-app` samples run.
 * Create repo using the directory skeleton above; push initial commit.
 * Record 10–20 short clips and frames from camera (day & night). Store under `data/raw/cam01/`.
+* Developer QoL: configure `uv` for local dev; on Jetson use `pip install -r requirements-jetson.txt -c constraints-jetson.txt`.
 
 **Day 3**
 
@@ -232,6 +245,10 @@ Status (as of 2025-10-22):
 - ONNXRuntime fallback exposed via CLI [done].
 \- ONNX ONNX-side preprocessing upgrades: keep-aspect letterbox defaults, optional brightness-gated CLAHE, and optional deskew [done].
 
+Reflective update (2025-10-24):
+- Synchronous `/v1/alpr` endpoint shipped and documented (see `docs/INTEGRATION_TESTING.md`) [done].
+- Compose stubs currently use Python 3.10; add task to align containers with Jetson Python 3.8 base (see §11 and §19) [open].
+
 **Day 10–11**
 
 * Add **rectification**: if 4-corner polygon available, compute homography; else min‑area rect.
@@ -254,12 +271,17 @@ Status:
 * Acceptance for this milestone: initial exact‑match plate accuracy; p95 end‑to‑end latency < 80 ms; `/healthz` and `/metrics` expose FPS and queue depth.
 
 Status:
-- DS → OCR crop transport [open]. Baseline to start with HTTP; ZeroMQ/IPC as target.
+- DS → OCR crop transport [http baseline implemented 2025-10-24]; ZeroMQ/IPC upgrade moves to Week 3.
 - API endpoints scaffolded in `src/api_server/server.py` [partial]; persistence (SQLite + snapshots) [open].
+- API persistence (SQLite + snapshots) [done 2025-10-24]; metrics now surface queue depth + event counts.
 - Offline E2E on images implemented (`python -m alpr_jetson e2e`) [done].
 - Resource tuning flags implemented and documented [done].
 - New tooling: e2e text-only output option (stdout or file) [done].
 - Acceptance pending: requires live RTSP E2E and metrics wiring [open].
+
+Reflective adjustment:
+- Make HTTP bridge the explicit milestone for Week 2; move ZeroMQ/IPC upgrade to Week 3 (Day 15–16) for performance hardening.
+- Include SQLite + snapshot persistence in Week 2 acceptance scope to support downstream integration testing.
 
 ### Week 3 — Quality Push I
 
@@ -268,6 +290,7 @@ Status:
 * Active learning loop: auto‑score low‑conf plates; append **+2k frames** and **+5k OCR crops**. Retrain detector.
 * Implement **temporal majority voting** and **regex‑constrained correction** with edit distance.
 * Expand dataset for multi-camera coverage: balance training/validation splits by `camera_id`, seed collection for new viewpoints, and document gaps.
+* Upgrade DS→OCR transport from HTTP to **ZeroMQ/IPC**; add back-pressure and bounded queues with metrics (moved from Week 2).
 
 **Day 17–18**
 
@@ -286,6 +309,7 @@ Status:
 * Add **healthz** and **metrics** to API; include FPS, queue depth, GPU util, last frame ts. (Note: stubs exist earlier; extend with real metrics here.)
 * Write **systemd units** for the three services; configure `Restart=always`, `WatchdogSec=30`.
 * Implement structured JSON logging with per-stage latency, integrate tegrastats sampling, and configure log rotation/retention (Jetson-compliant).
+* Align Docker/Compose to Jetson 3.8 base images; ensure containers run with proper CUDA/TensorRT (see §19 guidance). Replace placeholder images in `deploy/compose.jetson.yml`.
 
 **Day 23–24**
 
@@ -578,6 +602,7 @@ eval:
 **Pass conditions:**
 
 * ≥95% exact match; no crash in 72 h soak; webhook delivery success ≥99.5% with retries.
+* Jetson-specific: installs succeed with `requirements-jetson.txt -c constraints-jetson.txt`; `/metrics` populated from real processing.
 
 ---
 
@@ -596,6 +621,7 @@ eval:
 * Use **shared memory** (`/dev/shm`) for crop exchange to minimize I/O.
 * Store a **small rolling cache** (e.g., last 2 hours) of full frames for incident review.
 * When expanding to more cameras, consider **substream for detection** and pull high‑res JPEG on demand for OCR.
+* For privacy, implement optional face redaction/blur on snapshots using a lightweight detector (deploy toggle).
 
 ---
 
@@ -635,6 +661,7 @@ end
 * [ ] Vehicle class detector to pre‑crop and improve SNR for far plates.
 * [ ] On‑box backup to USB SSD; periodic rsync.
 * [ ] UI dashboard for live events, snapshots, and search.
+* [ ] Optional face redaction pipeline toggle validated on snapshots.
 
 ---
 
@@ -646,5 +673,21 @@ Start a `data/labeled/ocr_crops/seed/` with crops from:
   (Use these only as *examples*; always confirm ground truth during labeling.)
 
 ---
+
+## 19) Jetson Dependency Profiles (Dev vs Runtime)
+
+To keep installs reliable on Jetson NX while allowing rich tooling on workstations:
+
+- Create two files in the repo root:
+  - `requirements-jetson.txt` (runtime): `fastapi`, `uvicorn`, `pyyaml`, and project local install (`-e .`) without heavy extras.
+  - `constraints-jetson.txt`: pin versions compatible with Python 3.8 and JetPack 5.1.5; exclude `opencv-python` wheels.
+- On Jetson, install via:
+
+```bash
+pip install -r requirements-jetson.txt -c constraints-jetson.txt
+```
+
+- Use system OpenCV on Jetson (apt packages) and ensure `numpy` pins to a version with available aarch64 wheels for JP 5.1.5.
+- Keep `requires-python` set to `>=3.8,<3.9` for target builds.
 
 **This document is self‑contained. Use it as the single source of truth during development.**

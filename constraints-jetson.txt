@@ -1,0 +1,11 @@
+# Version pins validated for Jetson Xavier NX (JetPack 5.1.5, Python 3.8.x).
+# Use alongside requirements-jetson.txt to ensure compatible wheels.
+
+fastapi==0.119.1
+starlette==0.37.2
+uvicorn==0.33.0
+pyyaml==6.0.1
+numpy==1.23.5
+python-multipart==0.0.9
+onnxruntime-gpu==1.16.3
+

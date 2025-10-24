@@ -28,7 +28,7 @@ try:
 except Exception as e:  # pragma: no cover
     ort = None  # type: ignore
 
-
+#interpolasi yang ada pada opencv 
 _INTERP = {
     "nearest": cv2.INTER_NEAREST,
     "linear": cv2.INTER_LINEAR,
@@ -37,13 +37,14 @@ _INTERP = {
     "lanczos4": cv2.INTER_LANCZOS4,
 }
 
-
+#fungsi place holder untuk melakukan konversi ke color tipe rgb (opencv default colour system is BGR)
 def _to_rgb(img_bgr: np.ndarray) -> np.ndarray:
     if img_bgr.ndim == 2:
         return cv2.cvtColor(img_bgr, cv2.COLOR_GRAY2RGB)
     return cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
 
 
+#memastikan color yang digunakan oleh program sesuain dengan standar yang tleah diberikan
 def _ensure_color_mode(img: np.ndarray, mode: str) -> np.ndarray:
     mode = mode.lower()
     if mode not in {"rgb", "grayscale"}:
@@ -62,6 +63,7 @@ def _ensure_color_mode(img: np.ndarray, mode: str) -> np.ndarray:
     raise ValueError("invalid input for rgb mode")
 
 
+#m
 def _resize_letterbox(
     img: np.ndarray,
     target_h: int,
@@ -85,6 +87,7 @@ def _resize_letterbox(
     top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1))
     left, right = int(round(dw - 0.1)), int(round(dw + 0.1))
 
+    #meenentukan bahwa image yang digunakan berupa grayscale
     if image_color_mode.lower() == "grayscale":
         if isinstance(padding_color, (list, tuple)):
             color_gray = int(padding_color[0])
@@ -148,6 +151,10 @@ def _decode_logits(
 
 @dataclass(frozen=True)
 class PlateConfig:
+    """
+    Berisi konfigurasi plat yang disamakan dengan  tipe yang diperlukan
+
+    """
     max_plate_slots: int
     alphabet: str
     pad_char: str
@@ -209,6 +216,7 @@ class OnnxPlateOCR:
         selected_providers.append("CPUExecutionProvider")
         provider_options.append({})
 
+        #memulai session inference
         self.session = ort.InferenceSession(
             onnx_path,
             sess_options=so,

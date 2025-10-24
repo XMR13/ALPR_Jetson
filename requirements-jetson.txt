@@ -1,0 +1,17 @@
+# Runtime dependencies for Jetson NX (Python 3.8, JetPack 5.1.5).
+# Install with: pip install -r requirements-jetson.txt -c constraints-jetson.txt
+#
+# Notes:
+# - Do not add opencv-python wheels here; use the system OpenCV from JetPack.
+# - TensorRT, PyCUDA, and DeepStream libraries come from NVIDIA packages.
+
+fastapi
+uvicorn
+pyyaml
+numpy
+python-multipart
+onnxruntime-gpu
+
+# Local editable install for project modules.
+-e .
+

@@ -188,10 +188,11 @@ ONNX OCR — Peningkatan Kualitas
 
 API (FastAPI) — Stub Endpoints
 - Server skeleton: `src/api_server/server.py` (import-safe tanpa FastAPI). Saat FastAPI tersedia, exposes:
-  - `GET /healthz`, `GET /metrics`
-  - `GET /v1/stream/info`, `POST /v1/hooks`, `GET /v1/events`, `WS /v1/ws`
-  - Synchronous test endpoint `POST /v1/alpr` (multipart upload) untuk integrasi sistem yang sudah menyimpan snapshot; lihat `docs/API.md` untuk detail kontrak.
-  - Kontrak endpoint lainnya mengikuti `plan.md §9`.
+- `GET /healthz`, `GET /metrics`
+- `GET /v1/stream/info`, `POST /v1/hooks`, `GET /v1/events`, `WS /v1/ws`
+- Synchronous test endpoint `POST /v1/alpr` (multipart upload) untuk integrasi sistem yang sudah menyimpan snapshot; lihat `docs/API.md` untuk detail kontrak.
+- Kontrak endpoint lainnya mengikuti `plan.md §9`.
+- Panduan integrasi PHP ↔ Jetson (flow `capture → /v1/alpr → response`) ada di `docs/INTEGRATION_TESTING.md`.
 
 
 Temporal Voting per Track
