@@ -10,14 +10,14 @@ Current Week/Day
 
 Open Items (mirrors plan.md §5)
 - Upgrade DS→OCR transport to ZeroMQ/IPC (Week 3 target)
-- OCR CER/SER tooling and low-confidence snapshot capture
 - Rectification wiring or deskew path usage where available
 - Update Jetson Compose/Docker images to Python 3.8 base (Week 4)
+- Live RTSP/E2E soak with metrics populated from queue bridge
 
 Next 3 Actions
-1) Add CER/SER evaluator and low-confidence logging in tools/eval_e2e.py
-2) Wire rectification/deskew path where polygon data exists; document usage
-3) Update deploy/compose.jetson.yml to Jetson-friendly Python 3.8 base images
+1) Wire rectification/deskew path where polygon data exists; document usage
+2) Update deploy/compose.jetson.yml to Jetson-friendly Python 3.8 base images
+3) Plan DS→OCR ZeroMQ/IPC upgrade (queue stats integration)
 
 Decisions/Risks
 - Start with HTTP bridge to ship quickly on Jetson; move to IPC later for lower latency

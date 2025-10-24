@@ -258,7 +258,7 @@ Reflective update (2025-10-24):
 Status:
 - CLAHE/grayscale/resize in `src/ocr_service/preprocess.py` [done].
 - Rectification helper present but not yet used E2E [partial].
-- CER/SER evaluator and low-confidence snapshot capture [open].
+- CER/SER evaluator and low-confidence snapshot capture [done 2025-10-24 via `tools/eval_e2e.py`].
 
 **Day 12–13**
 

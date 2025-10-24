@@ -63,6 +63,7 @@ DeepStream:
 Pelatihan & ekspor YOLOv9 dilakukan di lingkungan eksternal Anda. Lihat `docs/TRAINING_NOTES.md` untuk catatan ekspor ONNX → TensorRT.
 
 Detail rencana dan tonggak: `plan.md`.
+Panduan evaluasi akurasi end-to-end (CER/SER, low-confidence) ada di `docs/EVALUATION.md`.
 
 OCR (CRNN/Paddle-style) — Preproc & Service
 - Preprocessing module: `src/ocr_service/preprocess.py` (grayscale + CLAHE + normalize to 32x160 by default).
