@@ -283,10 +283,42 @@ class OnnxPlateOCR:
             img2 = img2[:, :, None]
         return img2.astype(np.uint8)
 
-    def infer_batch(self, images_bgr: Iterable[np.ndarray], return_confidence: bool = False):
+    def infer_batch(
+        self,
+        images_bgr: Iterable[np.ndarray],
+        return_confidence: bool = False,
+        *,
+        polygons: Optional[Iterable[Optional[Sequence[Tuple[float, float]]]]] = None,
+    ):
         imgs = list(images_bgr)
         if not imgs:
             return []
+        polys: List[Optional[Sequence[Tuple[float, float]]]] = []
+        if polygons is not None:
+            polys = list(polygons)
+            # pad/truncate to match imgs length
+            if len(polys) < len(imgs):
+                polys += [None] * (len(imgs) - len(polys))
+            elif len(polys) > len(imgs):
+                polys = polys[: len(imgs)]
+
+        # If polygon provided, rectify to target dims before normal preprocessing
+        rectified: List[np.ndarray] = []
+        if polys:
+            target_h = int(self.cfg.img_height)
+            target_w = int(self.cfg.img_width)
+            for im, poly in zip(imgs, polys):
+                if poly and len(poly) == 4:
+                    try:
+                        src = np.array(poly, dtype=np.float32)
+                        dst = np.array([[0, 0], [target_w - 1, 0], [target_w - 1, target_h - 1], [0, target_h - 1]], dtype=np.float32)
+                        M = cv2.getPerspectiveTransform(src, dst)
+                        im = cv2.warpPerspective(im, M, (target_w, target_h), flags=cv2.INTER_LINEAR)
+                    except Exception:
+                        pass
+                rectified.append(im)
+            imgs = rectified
+
         batch = np.stack([self._preprocess_one(x) for x in imgs], axis=0)  # NHWC uint8
         out = self.session.run([self.output_name], {self.input_name: batch})[0]
         return _decode_logits(

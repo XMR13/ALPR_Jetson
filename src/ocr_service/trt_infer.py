@@ -170,7 +170,12 @@ class OCRService:
                 print(f"[OCRService] Failed to load engine: {e}")
                 self._runner = None
 
-    def infer_batch(self, images_bgr: Iterable[np.ndarray]) -> List[str]:
+    def infer_batch(
+        self,
+        images_bgr: Iterable[np.ndarray],
+        *,
+        polygons: Optional[Iterable[Optional[Sequence[Tuple[float, float]]]]] = None,
+    ) -> List[str]:
         """Infer a batch of BGR plate crops to strings.
 
         Falls back to placeholder strings if TRT runtime is not available.
@@ -181,7 +186,7 @@ class OCRService:
         if self._runner is None:
             return ["<ocr-unavailable>"] * len(imgs)
 
-        x = prepare_ocr_batch(imgs, self.preproc)  # [N,C,H,W]
+        x = prepare_ocr_batch(imgs, self.preproc, polygons=polygons)  # [N,C,H,W]
         if self.input_layout == "NHWC":
             x = np.transpose(x, (0, 2, 3, 1))
         logits = self._runner.infer(x)

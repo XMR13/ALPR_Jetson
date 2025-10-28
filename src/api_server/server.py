@@ -136,19 +136,23 @@ def _decode_base64_image(data: str) -> Tuple[bytes, Optional[Any]]:
     return raw, img
 
 
-def _infer_ocr_single(runtime: "_Runtime", crop: Any) -> Tuple[str, List[float]]:
+def _infer_ocr_single(
+    runtime: "_Runtime",
+    crop: Any,
+    polygon_xy: Optional[List[Tuple[float, float]]] = None,
+) -> Tuple[str, List[float]]:
     runner = runtime.ocr_runner
     if runner is None:
         raise RuntimeError("OCR runner not initialised")
     if runtime.ocr_mode == "onnx":
-        res = runner.infer_batch([crop], return_confidence=True)  # type: ignore[attr-defined]
+        res = runner.infer_batch([crop], return_confidence=True, polygons=[polygon_xy])  # type: ignore[attr-defined]
         if isinstance(res, tuple) and len(res) == 2:
             texts, confs = res  # type: ignore[misc]
             text = texts[0] if texts else ""
             return text, list(confs[0]) if confs else []
         texts = list(res) if isinstance(res, Iterable) else []  # type: ignore[arg-type]
         return (texts[0] if texts else "", [])
-    texts = runner.infer_batch([crop])  # type: ignore[attr-defined]
+    texts = runner.infer_batch([crop], polygons=[polygon_xy])  # type: ignore[attr-defined]
     return (texts[0] if texts else "", [])
 
 
@@ -235,6 +239,7 @@ class CropTask:
     frame_id: Optional[int] = None
     track_id: Optional[int] = None
     sequence_id: int = 0
+    polygon_xy: Optional[List[Tuple[float, float]]] = None
 
 
 def _initialize_runtime(cfg: AppConfig) -> Tuple[Optional[_Runtime], Optional[RuntimeErrorState]]:
@@ -478,7 +483,9 @@ def create_app(cfg: Optional[AppConfig] = None) -> "FastAPI | None":
         if postprocess_indonesia is None:
             raise RuntimeError("postprocess module unavailable")
         loop = asyncio.get_running_loop()
-        text, char_confs = await loop.run_in_executor(None, _infer_ocr_single, state.runtime, task.crop)
+        text, char_confs = await loop.run_in_executor(
+            None, _infer_ocr_single, state.runtime, task.crop, task.polygon_xy
+        )
         norm_text, is_valid = postprocess_indonesia(text, allowed_prefix=state.config.allowed_prefixes or None)
         plate_conf = _compute_plate_conf(task.det_conf, char_confs)
         detection_payload = {
@@ -696,11 +703,22 @@ def create_app(cfg: Optional[AppConfig] = None) -> "FastAPI | None":
             bbox: Tuple[int, int, int, int] = Field(..., description="[x1,y1,x2,y2] in source frame")
             ts: Optional[str] = None
             sequence_id: int = Field(0, ge=0)
+            polygon: Optional[List[float]] = Field(
+                None,
+                description="Optional quadrilateral as 8 floats [x0,y0,x1,y1,x2,y2,x3,y3] in source frame coords",
+            )
 
             @validator("bbox")
             def _bbox_len(cls, value: Tuple[int, int, int, int]):  # type: ignore
                 if len(value) != 4:
                     raise ValueError("bbox must have four elements")
+                return value
+            @validator("polygon")
+            def _poly_len(cls, value: Optional[List[float]]):  # type: ignore
+                if value is None:
+                    return value
+                if len(value) != 8:
+                    raise ValueError("polygon must have 8 elements [x0,y0,..,x3,y3]")
                 return value
 
         @app.post("/v1/crops")
@@ -717,6 +735,12 @@ def create_app(cfg: Optional[AppConfig] = None) -> "FastAPI | None":
                 raise HTTPException(status_code=413, detail="crop exceeds size limit")
             if crop is None:
                 raise HTTPException(status_code=500, detail="numpy/opencv not available")
+            # convert polygon flat list to list of (x,y) tuples
+            poly_xy: Optional[List[Tuple[float, float]]] = None
+            if payload.polygon is not None:
+                coords = [float(v) for v in payload.polygon]
+                poly_xy = [(coords[i], coords[i + 1]) for i in range(0, 8, 2)]
+
             task = CropTask(
                 camera_id=payload.camera_id,
                 request_id=payload.request_id,
@@ -727,6 +751,7 @@ def create_app(cfg: Optional[AppConfig] = None) -> "FastAPI | None":
                 frame_id=payload.frame_id,
                 track_id=payload.track_id,
                 sequence_id=payload.sequence_id,
+                polygon_xy=poly_xy,
             )
             try:
                 state.crop_queue.put_nowait(task)
@@ -789,6 +814,9 @@ def create_app(cfg: Optional[AppConfig] = None) -> "FastAPI | None":
         crops: List[Any] = []
         det_meta: List[Tuple[Tuple[int, int, int, int], float, int]] = []
         h, w = frame.shape[:2]
+        # Heuristics from plan.md: ignore tiny or implausible aspect crops
+        MIN_H = 28
+        AR_MIN, AR_MAX = 1.5, 5.0
         for bbox, score, cls in detections:
             x1, y1, x2, y2 = [int(round(v)) for v in bbox]
             x1 = max(0, min(x1, w - 1))
@@ -799,6 +827,12 @@ def create_app(cfg: Optional[AppConfig] = None) -> "FastAPI | None":
                 continue
             crop = frame[y1:y2, x1:x2]
             if crop.size == 0:
+                continue
+            # gate by height and aspect ratio to reduce garbage OCRs
+            hbox = max(1, y2 - y1)
+            wbox = max(1, x2 - x1)
+            ar = float(wbox) / float(hbox)
+            if (hbox < MIN_H) or (ar < AR_MIN) or (ar > AR_MAX):
                 continue
             crops.append(crop)
             det_meta.append(((x1, y1, x2, y2), float(score), int(cls)))
@@ -880,4 +914,3 @@ def main() -> None:  # pragma: no cover
 
 if __name__ == "__main__":  # pragma: no cover
     main()
-

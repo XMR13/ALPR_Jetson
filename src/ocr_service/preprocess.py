@@ -133,13 +133,22 @@ def prepare_ocr_input(
 
 
 def prepare_ocr_batch(
-    imgs_bgr: Iterable[np.ndarray], cfg: PreprocConfig = PreprocConfig()
+    imgs_bgr: Iterable[np.ndarray],
+    cfg: PreprocConfig = PreprocConfig(),
+    polygons: Optional[Iterable[Optional[Sequence[Tuple[float, float]]]]] = None,
 ) -> np.ndarray:
     """Vectorized batch builder from a sequence of BGR crops.
 
     Returns an array of shape [N, C, H, W] float32.
     """
-    arrs = [prepare_ocr_input(im, cfg) for im in imgs_bgr]
+    if polygons is None:
+        arrs = [prepare_ocr_input(im, cfg) for im in imgs_bgr]
+    else:
+        # Pair each image with its polygon (or None)
+        arrs = [
+            prepare_ocr_input(im, cfg, poly)
+            for im, poly in zip(imgs_bgr, polygons)
+        ]
     if not arrs:
         return np.empty((0, cfg.channels, cfg.input_height, cfg.input_width), dtype=np.float32)
     return np.concatenate(arrs, axis=0)
