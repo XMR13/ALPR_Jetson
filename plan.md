@@ -205,6 +205,11 @@ alpr-indonesia/
 * Create repo using the directory skeleton above; push initial commit.
 * Record 10–20 short clips and frames from camera (day & night). Store under `data/raw/cam01/`.
 * Developer QoL: configure `uv` for local dev; on Jetson use `pip install -r requirements-jetson.txt -c constraints-jetson.txt`.
+* Add dataset tools for detector training (YOLOv9):
+  - `tools/coco_to_yolo.py` to convert COCO to YOLO labels [added 2025-10-24].
+  - `tools/gen_yolov9_data_yaml.py` to generate dataset YAML [added 2025-10-24].
+  - `tools/verify_yolo_dataset.py` to sanity-check YOLO datasets [added 2025-10-24].
+  - Extend `tools/dataset_stats.py` to support YOLO roots [added 2025-10-24].
 
 **Day 3**
 
@@ -217,6 +222,10 @@ alpr-indonesia/
 
 * Label **2k frames** with tight **plate boxes**. Export as CVAT JSON; convert to COCO (`tools/coco_from_cvat.py`).
 * Run `tools/crop_from_boxes.py` to generate initial OCR crops + blank text files.
+* If training with YOLOv9 repo:
+  - Convert COCO → YOLO labels using `tools/coco_to_yolo.py` (train/val separately).
+  - Generate dataset YAML with `tools/gen_yolov9_data_yaml.py` and verify with `tools/verify_yolo_dataset.py`.
+  - See `docs/TRAIN_YOLOV9.md` for train/export/integration steps.
 
 **Day 6–7**
 
@@ -248,6 +257,7 @@ Status (as of 2025-10-22):
 Reflective update (2025-10-24):
 - Synchronous `/v1/alpr` endpoint shipped and documented (see `docs/INTEGRATION_TESTING.md`) [done].
 - Compose stubs currently use Python 3.10; add task to align containers with Jetson Python 3.8 base (see §11 and §19) [open].
+ - Training pipeline alignment: YOLOv9 data tools added; integrate retraining loop into progress logs when new datasets are introduced [open].
 
 **Day 10–11**
 
@@ -291,6 +301,7 @@ Reflective adjustment:
 * Implement **temporal majority voting** and **regex‑constrained correction** with edit distance.
 * Expand dataset for multi-camera coverage: balance training/validation splits by `camera_id`, seed collection for new viewpoints, and document gaps.
 * Upgrade DS→OCR transport from HTTP to **ZeroMQ/IPC**; add back-pressure and bounded queues with metrics (moved from Week 2).
+* YOLOv9-specific detector iteration: if dataset stats show many small plates (p50 plate height < 40 px), retrain at `--img 736..800`, enable `--rect` (rectangular training), and perform a final fine-tune phase (10–15 epochs) with reduced aug. Document commands in `docs/TRAIN_YOLOV9.md`.
 
 **Day 17–18**
 

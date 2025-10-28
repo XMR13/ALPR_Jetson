@@ -97,6 +97,17 @@ deskew_threshold_deg: 12.0
 - Pelatihan & ekspor OCR: lihat `docs/OCR_MODEL.md` untuk panduan PaddleOCR → ONNX → TensorRT, termasuk target akurasi dan layout model.
 - Evaluasi akurasi OCR: `tools/eval_ocr.py --engine ... --charset ... --crops ... --labels ...` menghitung exact-match dan CER.
 
+Dataset tools (COCO ↔ YOLO, YOLOv9)
+- COCO → YOLO labels: `python tools/coco_to_yolo.py --coco <coco.json> --outdir <labels_dir>`
+- Generate YOLOv9 dataset YAML: `python tools/gen_yolov9_data_yaml.py --root <yolo_root> --names plate --out configs/training/plates_yolov9.yaml`
+- Verify YOLO dataset alignment: `python tools/verify_yolo_dataset.py --root <yolo_root>`
+- Dataset stats:
+  - COCO: `python tools/dataset_stats.py --coco <coco.json>`
+  - YOLO: `python tools/dataset_stats.py --yolo-root <yolo_root>`
+
+Training with YOLOv9
+- See docs/TRAIN_YOLOV9.md for end-to-end steps (train in the YOLOv9 repo, export ONNX, build TRT, evaluate, and integrate).
+
 Contoh pakai OCR (lokal, jika FastAPI terpasang):
 ```bash
 python -c "from ocr_service.app import create_app; print(bool(create_app()))"  # True jika FastAPI siap
