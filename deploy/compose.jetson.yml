@@ -3,11 +3,27 @@ services:
   alpr-deepstream:
     image: nvcr.io/nvidia/deepstream:6.4-triton-multiarch
     runtime: nvidia
-    command: ["/bin/true"] # placeholder
+    working_dir: /workspace
+    volumes:
+      - ..:/workspace:rw
+    command: ["/bin/true"] # placeholder (DeepStream app runs via dedicated entry later)
   alpr-ocr:
-    image: python:3.10-slim
-    command: ["python","-c","print('ocr stub')"]
+    image: nvcr.io/nvidia/l4t-ml:r35.5.0-py3
+    runtime: nvidia
+    working_dir: /workspace
+    volumes:
+      - ..:/workspace:rw
+    environment:
+      - PYTHONPATH=/workspace
+    # Start idle; install deps then run OCR service as needed
+    command: ["bash","-lc","sleep infinity"]
   alpr-api:
-    image: python:3.10-slim
-    command: ["python","-c","print('api stub')"]
-
+    image: nvcr.io/nvidia/l4t-ml:r35.5.0-py3
+    runtime: nvidia
+    working_dir: /workspace
+    volumes:
+      - ..:/workspace:rw
+    environment:
+      - PYTHONPATH=/workspace
+    # Start idle; install deps then run API (uvicorn --factory src.api_server.server:create_app)
+    command: ["bash","-lc","sleep infinity"]

@@ -256,7 +256,7 @@ Status (as of 2025-10-22):
 
 Reflective update (2025-10-24):
 - Synchronous `/v1/alpr` endpoint shipped and documented (see `docs/INTEGRATION_TESTING.md`) [done].
-- Compose stubs currently use Python 3.10; add task to align containers with Jetson Python 3.8 base (see §11 and §19) [open].
+- Compose stubs currently use Python 3.10; add task to align containers with Jetson Python 3.8 base (see §11 and §19) [done 2025-10-24].
  - Training pipeline alignment: YOLOv9 data tools added; integrate retraining loop into progress logs when new datasets are introduced [open].
 
 **Day 10–11**
@@ -320,7 +320,7 @@ Reflective adjustment:
 * Add **healthz** and **metrics** to API; include FPS, queue depth, GPU util, last frame ts. (Note: stubs exist earlier; extend with real metrics here.)
 * Write **systemd units** for the three services; configure `Restart=always`, `WatchdogSec=30`.
 * Implement structured JSON logging with per-stage latency, integrate tegrastats sampling, and configure log rotation/retention (Jetson-compliant).
-* Align Docker/Compose to Jetson 3.8 base images; ensure containers run with proper CUDA/TensorRT (see §19 guidance). Replace placeholder images in `deploy/compose.jetson.yml`.
+* Align Docker/Compose to Jetson 3.8 base images; ensure containers run with proper CUDA/TensorRT (see §19 guidance). Replace placeholder images in `deploy/compose.jetson.yml`. [done 2025-10-24]
 
 **Day 23–24**
 

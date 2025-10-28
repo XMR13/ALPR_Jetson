@@ -7,6 +7,7 @@ uji cepat:
 - **Detector-only** (`det-infer`): jalankan YOLOv9 TRT tanpa OCR, dengan opsi anotasi keluaran dan ekspor crop plat.
 - **OCR-only** (`ocr-infer`): gunakan TensorRT **atau** ONNX slot-based OCR pada folder/gambar.
 - **End-to-end** (`e2e`): detektor + OCR sekaligus dengan opsi teks-only / simpan anotasi.
+- **End-to-end JSON** (`e2e-json`): jalankan detektor + OCR untuk satu gambar dan cetak JSON ke stdout (untuk integrasi PHP sementara).
 - **Smoke tests**: `rtsp-smoke` (GStreamer) dan `ds-smoke` (DeepStream).
 
 Contoh cepat (gunakan `PYTHONPATH=src` bila belum `pip install -e .`):
@@ -108,6 +109,14 @@ Dataset tools (COCO ↔ YOLO, YOLOv9)
 Training with YOLOv9
 - See docs/TRAIN_YOLOV9.md for end-to-end steps (train in the YOLOv9 repo, export ONNX, build TRT, evaluate, and integrate).
 
+Jetson containers (compose.jetson.yml)
+- `deploy/compose.jetson.yml` now targets JetPack 5.1.5 via `nvcr.io/nvidia/l4t-ml:r35.5.0-py3` (Python 3.8). Pull these images on the NX before running compose:
+  ```bash
+  sudo docker pull nvcr.io/nvidia/l4t-ml:r35.5.0-py3
+  sudo docker pull nvcr.io/nvidia/deepstream:6.4-triton-multiarch
+  ```
+- Both `alpr-ocr` and `alpr-api` services inherit Python 3.8 from that base; runtime assumes `python3` is available in-path.
+
 Contoh pakai OCR (lokal, jika FastAPI terpasang):
 ```bash
 python -c "from ocr_service.app import create_app; print(bool(create_app()))"  # True jika FastAPI siap
@@ -178,6 +187,40 @@ python -m alpr_jetson e2e \
   --source data/raw/cam01/frames \
   --annotate-dir export/eval/e2e_vis \
   --text-out export/eval/e2e_texts.txt
+```
+
+End-to-end sekali jalan (JSON untuk PHP)
+
+```bash
+# Opsi 1: panggil CLI secara langsung
+python -m alpr_jetson e2e-json \
+  --det-engine models/detector/yolov9-s_plate_fp16.engine \
+  --onnx models/ocr/cct_s_v1_global.onnx \
+  --plate-config models/ocr/cct_s_v1_global_plate_config.yaml \
+  --source /path/to/frame.jpg \
+  --conf 0.5
+# Keluaran ke stdout adalah JSON: {status, plates[], latency_ms{det,ocr,total}}
+```
+
+Wrapper sederhana (hanya butuh path gambar)
+
+```bash
+# Default backend: TensorRT OCR (ubah ke ONNX dengan OCR_BACKEND=onnx)
+tools/alpr_e2e_json.sh /path/to/frame.jpg
+
+# Override contoh:
+OCR_BACKEND=onnx tools/alpr_e2e_json.sh /path/to/frame.jpg
+```
+
+Contoh PHP (minimal) memanggil CLI dan membaca JSON:
+
+```php
+$img = '/tmp/frame.jpg';
+$cmd = escapeshellcmd('tools/alpr_e2e_json.sh ' . $img);
+$json = shell_exec($cmd);
+$data = json_decode($json, true);
+if (!$data) { /* tangani error */ }
+// $data['status'], $data['plates'][0]['text'], dst.
 ```
 
 ONNX OCR — Mode Memori (Jetson NX)
