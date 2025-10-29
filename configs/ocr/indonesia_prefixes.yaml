@@ -1,0 +1,68 @@
+# Allowed Indonesian license plate region prefixes (initial set)
+#
+# Note: This initial whitelist focuses on Java + Bali regions which match
+# the current deployment context. Extend as needed for other islands.
+# Each entry is a 1–2 letter region prefix.
+
+prefixes:
+  # Java (West Java/Banten/Jakarta)
+  - A
+  - B
+  - D
+  - E
+  - F
+  - T
+  - Z
+  # Central Java + Yogyakarta
+  - G
+  - H
+  - K
+  - R
+  - AA
+  - AB
+  - AD
+  # East Java
+  - AE
+  - AG
+  - L
+  - M
+  - N
+  - P
+  - S
+  - W
+  # Bali
+  - DK
+  # Nusa Tenggara
+  - DR  # West Nusa Tenggara (Lombok)
+  - EA  # West Nusa Tenggara (Sumbawa/Bima)
+  - DH  # East Nusa Tenggara (Kupang)
+  - EB  # East Nusa Tenggara (Flores/Alor)
+  # Sumatra
+  - BL  # Aceh
+  - BK  # North Sumatra
+  - BA  # West Sumatra
+  - BM  # Riau
+  - BP  # Riau Islands
+  - BH  # Jambi
+  - BD  # Bengkulu
+  - BG  # South Sumatra
+  - BN  # Bangka Belitung
+  - BE  # Lampung
+  # Kalimantan (Borneo)
+  - KB  # West Kalimantan
+  - KH  # Central Kalimantan
+  - DA  # South Kalimantan
+  - KT  # East Kalimantan
+  - KU  # North Kalimantan
+  # Sulawesi
+  - DB  # North Sulawesi
+  - DN  # Central Sulawesi
+  - DT  # Southeast Sulawesi
+  - DD  # South Sulawesi
+  - DC  # West Sulawesi
+  - DM  # Gorontalo
+  # Maluku & Papua
+  - DE  # Maluku
+  - DG  # North Maluku
+  - PA  # Papua
+  - PB  # West Papua (Papua Barat)

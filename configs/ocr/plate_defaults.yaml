@@ -1,0 +1,33 @@
+min_plate_h: 28
+min_ar: 1.5
+max_ar: 5.0
+topk: 1
+postproc: indonesia
+allowed_prefix:
+  # Java (West Java/Banten/Jakarta)
+  - A   # Banten
+  - B   # DKI Jakarta
+  - D   # Bandung (West Java)
+  - E   # Cirebon (West Java)
+  - F   # Bogor (West Java)
+  - T   # Subang (West Java)
+  - Z   # Priangan Timur (West Java)
+  # Central Java + Yogyakarta
+  - G   # Pekalongan (Central Java)
+  - H   # Semarang (Central Java)
+  - K   # Pati (Central Java)
+  - R   # Banyumas (Central Java)
+  - AA  # Magelang (Central Java)
+  - AB  # Yogyakarta (DIY)
+  - AD  # Surakarta/Solo (Central Java)
+  # East Java
+  - AE  # Madiun (East Java)
+  - AG  # Kediri (East Java)
+  - L   # Surabaya (East Java)
+  - M   # Madura (East Java)
+  - N   # Malang (East Java)
+  - P   # Jember/Banyuwangi (East Java)
+  - S   # Bojonegoro (East Java)
+  - W   # Sidoarjo/Gresik (East Java)
+  # Bali
+  - DK  # Bali
