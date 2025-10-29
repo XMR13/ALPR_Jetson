@@ -326,86 +326,74 @@ def cmd_e2e(args: argparse.Namespace) -> int:
 
     for img_path in paths:
         try:
-            img0, dets = infer_image(det_engine, img_path, conf=args.conf, iou=args.iou)
+            # Use the exact same canonical pipeline as JSON paths
+            result = _run_e2e_single(
+                img_path,
+                det_engine=det_engine,
+                ocr_runner=ocr_runner,
+                backend=backend,
+                conf=args.conf,
+                iou=args.iou,
+                postproc=args.postproc,
+                allowed_prefix=args.allowed_prefix or [],
+                postprocess_fn=postprocess_indonesia,
+                min_plate_h=getattr(args, "min_plate_h", 28),
+                min_ar=getattr(args, "min_ar", 1.5),
+                max_ar=getattr(args, "max_ar", 5.0),
+            )
         except Exception as exc:
-            print(f"failed detection on {img_path}: {exc}", file=sys.stderr)
+            print(f"failed e2e on {img_path}: {exc}", file=sys.stderr)
             continue
 
-        crops = []
-        boxes = []
-        scores = []
-        for box, score, cls in dets:
-            x1, y1, x2, y2 = [int(round(v)) for v in box]
-            x1 = max(0, min(x1, img0.shape[1] - 1))
-            x2 = max(0, min(x2, img0.shape[1] - 1))
-            y1 = max(0, min(y1, img0.shape[0] - 1))
-            y2 = max(0, min(y2, img0.shape[0] - 1))
-            if x2 <= x1 or y2 <= y1:
-                continue
-            # Apply same plate acceptance heuristics as JSON/stream path
-            hbox = max(1, y2 - y1)
-            wbox = max(1, x2 - x1)
-            ar = float(wbox) / float(hbox)
-            if (hbox < int(getattr(args, "min_plate_h", 28))) or (
-                ar < float(getattr(args, "min_ar", 1.5))
-            ) or (
-                ar > float(getattr(args, "max_ar", 5.0))
-            ):
-                continue
-            crop = img0[y1:y2, x1:x2]
-            if crop.size == 0:
-                continue
-            crops.append(crop)
-            boxes.append((x1, y1, x2, y2))
-            scores.append(float(score))
+        plates = result.get("plates", [])
+        final_texts = [p.get("text", "") for p in plates]
 
-        texts = ocr_runner.infer_batch(crops) if crops else []  # type: ignore[arg-type]
-
-        # Prepare final texts (optionally postprocessed)
-        final_texts = []
-        for idx in range(len(boxes)):
-            t = texts[idx] if idx < len(texts) else ""
-            if args.postproc == "indonesia" and t:
-                t, _ = postprocess_indonesia(t, allowed_prefix=args.allowed_prefix or None)
-            final_texts.append(t)
-
-        # Emit output depending on flags
         if args.text_only:
             for t in final_texts:
                 if t:
                     print(t)
                     text_lines.append(t)
-            # If no detections, print nothing in text-only mode
         else:
             print(f"{img_path}")
-            for idx, (bbox, det_score) in enumerate(zip(boxes, scores)):
-                label = final_texts[idx] if idx < len(final_texts) else ""
+            for idx, p in enumerate(plates):
+                bbox = tuple(int(v) for v in p.get("bbox", [0, 0, 0, 0]))
+                det_score = float(p.get("det_conf", 0.0))
+                label = p.get("text", "")
                 print(f"  det#{idx}: conf={det_score:.2f} plate='{label}' bbox={bbox}")
-            if not boxes:
+            if not plates:
                 print("  no detections above threshold")
-            # Also collect plain texts for optional --text-out
             for t in final_texts:
                 if t:
                     text_lines.append(t)
 
         if annotate_dir:
-            annotated = img0.copy()
-            for idx, ((x1, y1, x2, y2), det_score) in enumerate(zip(boxes, scores)):
-                label = final_texts[idx] if idx < len(final_texts) else ""
-                cv2.rectangle(annotated, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                cv2.putText(
-                    annotated,
-                    f"{label or '<unk>'}:{det_score:.2f}",
-                    (x1, max(0, y1 - 6)),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.5,
-                    (0, 255, 0),
-                    1,
-                    cv2.LINE_AA,
-                )
-            out_path = annotate_dir / (Path(img_path).stem + "_alpr.jpg")
-            cv2.imwrite(str(out_path), annotated)
-            print(f"  annotated: {out_path}")
+            try:
+                import cv2  # type: ignore
+                import numpy as np  # type: ignore
+                img0 = cv2.imread(str(img_path))
+                if img0 is None:
+                    raise RuntimeError("failed to read image for annotation")
+                annotated = img0.copy()
+                for idx, p in enumerate(plates):
+                    x1, y1, x2, y2 = [int(v) for v in p.get("bbox", [0, 0, 0, 0])]
+                    det_score = float(p.get("det_conf", 0.0))
+                    label = p.get("text", "") or "<unk>"
+                    cv2.rectangle(annotated, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                    cv2.putText(
+                        annotated,
+                        f"\n{label}:{det_score:.2f}",
+                        (x1, max(0, y1 - 6)),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.5,
+                        (0, 255, 0),
+                        1,
+                        cv2.LINE_AA,
+                    )
+                out_path = annotate_dir / (Path(img_path).stem + "_alpr.jpg")
+                cv2.imwrite(str(out_path), annotated)
+                print(f"  annotated: {out_path}")
+            except Exception as exc:
+                print(f"warn: annotation skipped for {img_path}: {exc}", file=sys.stderr)
 
     # If requested, write plain plate texts to a file (one per line)
     if getattr(args, "text_out", ""):
@@ -445,6 +433,8 @@ def _run_e2e_single(
     min_plate_h: int = 28,
     min_ar: float = 1.5,
     max_ar: float = 5.0,
+    debug_crops: bool = False,
+    accept_all: bool = False,
 ):
     import time
     from typing import List, Tuple
@@ -461,18 +451,37 @@ def _run_e2e_single(
     MIN_H = int(min_plate_h)
     AR_MIN, AR_MAX = float(min_ar), float(max_ar)
     crops: List[Tuple[Tuple[int, int, int, int], float]] = []
+    rejected: List[Tuple[Tuple[int, int, int, int], str]] = []
+    import math
     for bbox, score, _cls in dets:
-        x1, y1, x2, y2 = [int(round(v)) for v in bbox]
+        x1, y1, x2, y2 = [
+            int(math.floor(bbox[0])),
+            int(math.floor(bbox[1])),
+            int(math.ceil(bbox[2])),
+            int(math.ceil(bbox[3])),
+        ]
         x1 = max(0, min(x1, w - 1))
         x2 = max(0, min(x2, w - 1))
         y1 = max(0, min(y1, h - 1))
         y2 = max(0, min(y2, h - 1))
         if x2 <= x1 or y2 <= y1:
+            if debug_crops:
+                rejected.append(((x1, y1, x2, y2), "invalid_xy"))
             continue
         hbox = max(1, y2 - y1)
         wbox = max(1, x2 - x1)
         ar = float(wbox) / float(hbox)
-        if (hbox < MIN_H) or (ar < AR_MIN) or (ar > AR_MAX):
+        if (not accept_all) and hbox < MIN_H:
+            if debug_crops:
+                rejected.append(((x1, y1, x2, y2), "too_small"))
+            continue
+        if (not accept_all) and ar < AR_MIN:
+            if debug_crops:
+                rejected.append(((x1, y1, x2, y2), "ar_low"))
+            continue
+        if (not accept_all) and ar > AR_MAX:
+            if debug_crops:
+                rejected.append(((x1, y1, x2, y2), "ar_high"))
             continue
         crops.append(((x1, y1, x2, y2), float(score)))
 
@@ -513,11 +522,23 @@ def _run_e2e_single(
         )
 
     status = "ok" if plates else "no_plate"
-    return {
+    out = {
         "status": status,
         "plates": plates,
         "latency_ms": {"det": det_ms, "ocr": ocr_ms, "total": det_ms + ocr_ms},
     }
+    if debug_crops:
+        out["debug"] = {
+            "det_count": int(len(dets)),
+            "accepted": [
+                {"bbox": [x1, y1, x2, y2]} for (x1, y1, x2, y2), _ in crops
+            ],
+            "rejected": [
+                {"bbox": [x1, y1, x2, y2], "reason": reason} for ((x1, y1, x2, y2), reason) in rejected
+            ],
+            "params": {"min_h": MIN_H, "min_ar": AR_MIN, "max_ar": AR_MAX},
+        }
+    return out
 
 
 def cmd_e2e_json(args: argparse.Namespace) -> int:
@@ -562,6 +583,8 @@ def cmd_e2e_json(args: argparse.Namespace) -> int:
             min_plate_h=getattr(args, "min_plate_h", 28),
             min_ar=getattr(args, "min_ar", 1.5),
             max_ar=getattr(args, "max_ar", 5.0),
+            debug_crops=bool(getattr(args, "debug_crops", False)),
+            accept_all=bool(getattr(args, "accept_all", False)),
         )
     except Exception as exc:
         print(json.dumps({"error": str(exc)}))
@@ -619,6 +642,8 @@ def cmd_e2e_json_stream(args: argparse.Namespace) -> int:
                 min_plate_h=getattr(args, "min_plate_h", 28),
                 min_ar=getattr(args, "min_ar", 1.5),
                 max_ar=getattr(args, "max_ar", 5.0),
+                debug_crops=bool(getattr(args, "debug_crops", False)),
+                accept_all=bool(getattr(args, "accept_all", False)),
             )
             payload = {"input": path}
             payload.update(result)
@@ -692,6 +717,8 @@ def build_parser() -> argparse.ArgumentParser:
     _add_ocr_backend_args(p_e2e_json)
     p_e2e_json.add_argument("--postproc", choices=["none", "indonesia"], default="indonesia", help="Apply plate post-processing")
     p_e2e_json.add_argument("--allowed-prefix", nargs="*", default=["A","B","D","F","E","Z","T"], help="Allowed prefixes for postproc")
+    p_e2e_json.add_argument("--debug-crops", action="store_true", help="Include crop acceptance debug info in JSON")
+    p_e2e_json.add_argument("--accept-all", action="store_true", help="Bypass size/AR filters (debug)")
     p_e2e_json.set_defaults(func=cmd_e2e_json)
 
     p_e2e_stream = sub.add_parser(
@@ -708,6 +735,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_e2e_stream.add_argument("--postproc", choices=["none", "indonesia"], default="indonesia", help="Apply plate post-processing")
     p_e2e_stream.add_argument("--allowed-prefix", nargs="*", default=["A","B","D","F","E","Z","T"], help="Allowed prefixes for postproc")
     p_e2e_stream.add_argument("--stop-on-error", action="store_true", help="Stop processing on first error")
+    p_e2e_stream.add_argument("--debug-crops", action="store_true", help="Include crop acceptance debug info in NDJSON")
+    p_e2e_stream.add_argument("--accept-all", action="store_true", help="Bypass size/AR filters (debug)")
     p_e2e_stream.set_defaults(func=cmd_e2e_json_stream)
 
     return p
