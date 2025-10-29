@@ -342,6 +342,16 @@ def cmd_e2e(args: argparse.Namespace) -> int:
             y2 = max(0, min(y2, img0.shape[0] - 1))
             if x2 <= x1 or y2 <= y1:
                 continue
+            # Apply same plate acceptance heuristics as JSON/stream path
+            hbox = max(1, y2 - y1)
+            wbox = max(1, x2 - x1)
+            ar = float(wbox) / float(hbox)
+            if (hbox < int(getattr(args, "min_plate_h", 28))) or (
+                ar < float(getattr(args, "min_ar", 1.5))
+            ) or (
+                ar > float(getattr(args, "max_ar", 5.0))
+            ):
+                continue
             crop = img0[y1:y2, x1:x2]
             if crop.size == 0:
                 continue
@@ -432,6 +442,9 @@ def _run_e2e_single(
     postproc: str,
     allowed_prefix: List[str],
     postprocess_fn=None,
+    min_plate_h: int = 28,
+    min_ar: float = 1.5,
+    max_ar: float = 5.0,
 ):
     import time
     from typing import List, Tuple
@@ -445,8 +458,8 @@ def _run_e2e_single(
     det_ms = (time.time() - t0) * 1000.0
 
     h, w = img0.shape[:2]
-    MIN_H = 28
-    AR_MIN, AR_MAX = 1.5, 5.0
+    MIN_H = int(min_plate_h)
+    AR_MIN, AR_MAX = float(min_ar), float(max_ar)
     crops: List[Tuple[Tuple[int, int, int, int], float]] = []
     for bbox, score, _cls in dets:
         x1, y1, x2, y2 = [int(round(v)) for v in bbox]
@@ -546,6 +559,9 @@ def cmd_e2e_json(args: argparse.Namespace) -> int:
             postproc=args.postproc,
             allowed_prefix=args.allowed_prefix or [],
             postprocess_fn=postprocess_indonesia,
+            min_plate_h=getattr(args, "min_plate_h", 28),
+            min_ar=getattr(args, "min_ar", 1.5),
+            max_ar=getattr(args, "max_ar", 5.0),
         )
     except Exception as exc:
         print(json.dumps({"error": str(exc)}))
@@ -600,6 +616,9 @@ def cmd_e2e_json_stream(args: argparse.Namespace) -> int:
                 postproc=args.postproc,
                 allowed_prefix=args.allowed_prefix or [],
                 postprocess_fn=postprocess_indonesia,
+                min_plate_h=getattr(args, "min_plate_h", 28),
+                min_ar=getattr(args, "min_ar", 1.5),
+                max_ar=getattr(args, "max_ar", 5.0),
             )
             payload = {"input": path}
             payload.update(result)
@@ -651,6 +670,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_e2e.add_argument("--source", required=True, help="Image file or directory")
     p_e2e.add_argument("--conf", type=float, default=0.5, help="Detection confidence threshold")
     p_e2e.add_argument("--iou", type=float, default=0.45, help="Detection IoU threshold")
+    p_e2e.add_argument("--min-plate-h", type=int, default=28, help="Minimum plate bbox height (px) to OCR")
+    p_e2e.add_argument("--min-ar", type=float, default=1.5, help="Minimum plate aspect ratio (w/h)")
+    p_e2e.add_argument("--max-ar", type=float, default=5.0, help="Maximum plate aspect ratio (w/h)")
     p_e2e.add_argument("--annotate-dir", default="", help="Optional directory to save annotated outputs")
     p_e2e.add_argument("--text-only", action="store_true", help="Print only plate texts (one per line)")
     p_e2e.add_argument("--text-out", default="", help="Optional path to write plate texts (one per line)")
@@ -664,6 +686,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_e2e_json.add_argument("--source", required=True, help="Image file path")
     p_e2e_json.add_argument("--conf", type=float, default=0.5, help="Detection confidence threshold")
     p_e2e_json.add_argument("--iou", type=float, default=0.45, help="Detection IoU threshold")
+    p_e2e_json.add_argument("--min-plate-h", type=int, default=28, help="Minimum plate bbox height (px) to OCR")
+    p_e2e_json.add_argument("--min-ar", type=float, default=1.5, help="Minimum plate aspect ratio (w/h)")
+    p_e2e_json.add_argument("--max-ar", type=float, default=5.0, help="Maximum plate aspect ratio (w/h)")
     _add_ocr_backend_args(p_e2e_json)
     p_e2e_json.add_argument("--postproc", choices=["none", "indonesia"], default="indonesia", help="Apply plate post-processing")
     p_e2e_json.add_argument("--allowed-prefix", nargs="*", default=["A","B","D","F","E","Z","T"], help="Allowed prefixes for postproc")
@@ -676,6 +701,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_e2e_stream.add_argument("--det-engine", required=True, help="Path to detector TensorRT .engine")
     p_e2e_stream.add_argument("--conf", type=float, default=0.5, help="Detection confidence threshold")
     p_e2e_stream.add_argument("--iou", type=float, default=0.45, help="Detection IoU threshold")
+    p_e2e_stream.add_argument("--min-plate-h", type=int, default=28, help="Minimum plate bbox height (px) to OCR")
+    p_e2e_stream.add_argument("--min-ar", type=float, default=1.5, help="Minimum plate aspect ratio (w/h)")
+    p_e2e_stream.add_argument("--max-ar", type=float, default=5.0, help="Maximum plate aspect ratio (w/h)")
     _add_ocr_backend_args(p_e2e_stream)
     p_e2e_stream.add_argument("--postproc", choices=["none", "indonesia"], default="indonesia", help="Apply plate post-processing")
     p_e2e_stream.add_argument("--allowed-prefix", nargs="*", default=["A","B","D","F","E","Z","T"], help="Allowed prefixes for postproc")
