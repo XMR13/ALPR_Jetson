@@ -43,21 +43,21 @@ def _split_segments(t: str) -> Tuple[str, str, str]:
     Returns possibly empty suffix.
     """
     t = _clean(t)
-    # If spaces present and grouping looks sane, trust them
     parts = t.split(" ") if " " in t else []
     if 2 <= len(parts) <= 3:
-        prefix = re.sub(r"[^A-Z]", "", parts[0])
-        number = re.sub(r"[^0-9]", "", parts[1])
-        suffix = re.sub(r"[^A-Z]", "", parts[2]) if len(parts) == 3 else ""
+        # Keep alnum; don't strip letters out of number or digits out of letter segments yet.
+        prefix = re.sub(r"[^A-Z0-9]", "", parts[0])
+        number = re.sub(r"[^A-Z0-9]", "", parts[1])
+        suffix = re.sub(r"[^A-Z0-9]", "", parts[2]) if len(parts) == 3 else ""
         return prefix, number, suffix
 
-    # Otherwise derive by boundary between letters and digits
+    # Fallback heuristic unchanged (can also be relaxed similarly if you want)
     prefix = re.match(r"^[A-Z]{1,2}", t)
     p = prefix.group(0) if prefix else ""
-    rest = t[len(p) :]
-    number_match = re.match(r"^[0-9]{1,4}", rest)
+    rest = t[len(p):]
+    number_match = re.match(r"^[0-9A-Z]{1,4}", rest)  # allow A-Z to catch ambiguous chars
     n = number_match.group(0) if number_match else ""
-    suffix = re.sub(r"[^A-Z]", "", rest[len(n) :])
+    suffix = re.sub(r"[^A-Z0-9]", "", rest[len(n):])
     return p, n, suffix
 
 
@@ -82,11 +82,17 @@ def postprocess_indonesia(text: str, allowed_prefix: Optional[Iterable[str]] = N
     t = _clean(text)
     p, n, s = _split_segments(t)
     p, n, s = _apply_ambiguity(p, n, s)
+
+    # Now enforce segment character sets and max lengths
+    p = re.sub(r"[^A-Z]", "", p)[:2]
+    n = re.sub(r"[^0-9]", "", n)[:4]
+    s = re.sub(r"[^A-Z]", "", s)[:3]
+
     out = " ".join([x for x in (p, n, s) if x])
 
     is_match = re.match(regex, out) is not None
     if allowed_prefix is not None and p:
-        pref_ok = p in set(x.upper() for x in allowed_prefix)
+        pref_ok = p in {x.upper() for x in allowed_prefix}
         valid = is_match and pref_ok
     else:
         valid = is_match

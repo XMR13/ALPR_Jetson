@@ -418,52 +418,33 @@ def _plate_conf(det_conf: float, char_confs: list[float]) -> float:
     return float(det_conf) * float(avg_char)
 
 
-def cmd_e2e_json(args: argparse.Namespace) -> int:
-    """Run detector + OCR on a single image and print JSON to stdout.
+def _run_e2e_single(
+    image_path: str,
+    *,
+    det_engine,
+    ocr_runner,
+    backend: str,
+    conf: float,
+    iou: float,
+    postproc: str,
+    allowed_prefix: list[str],
+    postprocess_fn=None,
+):
+    import time
+    from typing import List, Tuple
 
-    Designed for simple PHP integration: pass an image path, receive a single
-    JSON object with status, plates, and latency breakdown.
-    """
-    try:
-        import json, time
-        from typing import List, Tuple
-        import cv2  # type: ignore
-        from ocr_service.postprocess import postprocess_indonesia  # type: ignore
-        from inference.yolov9_trt import load_engine, infer_image  # type: ignore
-    except Exception as e:
-        print(json.dumps({"error": f"runtime dependencies missing: {e}"}))
-        return 2
+    import cv2  # type: ignore
+    from inference.yolov9_trt import infer_image  # type: ignore
 
-    if args.iou < 0.0 or args.iou > 1.0:
-        print(json.dumps({"error": "--iou must be in [0,1]"}))
-        return 2
-
-    try:
-        backend, ocr_runner = _init_ocr_backend(args)
-    except Exception as exc:
-        print(json.dumps({"error": f"failed to initialize OCR backend: {exc}"}))
-        return 2
-
-    try:
-        det_engine = load_engine(args.det_engine, print_plugins=False)
-    except Exception as exc:
-        print(json.dumps({"error": f"failed to load detector: {exc}"}))
-        return 2
-
-    img_path = str(Path(args.source))
-    try:
-        t0 = time.time()
-        img0, dets = infer_image(det_engine, img_path, conf=args.conf, iou=args.iou)
-        det_ms = (time.time() - t0) * 1000.0
-    except Exception as exc:
-        print(json.dumps({"error": f"detection failed: {exc}"}))
-        return 2
+    img_path = str(Path(image_path))
+    t0 = time.time()
+    img0, dets = infer_image(det_engine, img_path, conf=conf, iou=iou)
+    det_ms = (time.time() - t0) * 1000.0
 
     h, w = img0.shape[:2]
-    # Heuristics consistent with API: gate by height >=28 and aspect within [1.5,5.0]
     MIN_H = 28
     AR_MIN, AR_MAX = 1.5, 5.0
-    crops: List[Tuple[Tuple[int,int,int,int], float]] = []
+    crops: List[Tuple[Tuple[int, int, int, int], float]] = []
     for bbox, score, _cls in dets:
         x1, y1, x2, y2 = [int(round(v)) for v in bbox]
         x1 = max(0, min(x1, w - 1))
@@ -484,46 +465,149 @@ def cmd_e2e_json(args: argparse.Namespace) -> int:
     ocr_ms = 0.0
     if crops:
         crop_imgs = [img0[y1:y2, x1:x2] for (x1, y1, x2, y2), _ in crops]
-        try:
-            t1 = time.time()
-            if backend == "onnx":
-                res = ocr_runner.infer_batch(crop_imgs, return_confidence=True)  # type: ignore[attr-defined]
-                if isinstance(res, tuple) and len(res) == 2:
-                    texts, char_confs = res  # type: ignore[misc]
-                else:
-                    texts = list(res)  # type: ignore[arg-type]
+        t1 = time.time()
+        if backend == "onnx":
+            res = ocr_runner.infer_batch(crop_imgs, return_confidence=True)  # type: ignore[attr-defined]
+            if isinstance(res, tuple) and len(res) == 2:
+                texts, char_confs = res  # type: ignore[misc]
             else:
-                texts = ocr_runner.infer_batch(crop_imgs)  # type: ignore[attr-defined]
-            ocr_ms = (time.time() - t1) * 1000.0
-        except Exception as exc:
-            print(json.dumps({"error": f"ocr failed: {exc}", "latency_ms": {"det": det_ms}}))
-            return 2
+                texts = list(res)  # type: ignore[arg-type]
+        else:
+            texts = ocr_runner.infer_batch(crop_imgs)  # type: ignore[attr-defined]
+        ocr_ms = (time.time() - t1) * 1000.0
 
     plates = []
     for i, ((x1, y1, x2, y2), det_conf) in enumerate(crops):
         raw = texts[i] if i < len(texts) else ""
         confs = char_confs[i] if i < len(char_confs) else []
-        final = raw
+        norm_text = raw
         is_valid = True
-        if args.postproc == "indonesia":
-            final, is_valid = postprocess_indonesia(raw, allowed_prefix=args.allowed_prefix or None)
-        plates.append({
-            "bbox": [int(x1), int(y1), int(x2), int(y2)],
-            "det_conf": float(det_conf),
-            "ocr_raw": raw,
-            "text": final,
-            "valid": bool(is_valid),
-            "plate_conf": _plate_conf(det_conf, confs),
-            "char_confs": [float(c) for c in confs],
-        })
+        if postproc == "indonesia" and postprocess_fn is not None:
+            norm_text, is_valid = postprocess_fn(raw, allowed_prefix=allowed_prefix or None)
+        plates.append(
+            {
+                "bbox": [int(x1), int(y1), int(x2), int(y2)],
+                "det_conf": float(det_conf),
+                "ocr_raw": raw,
+                "text": norm_text,
+                "valid": bool(is_valid),
+                "plate_conf": _plate_conf(det_conf, confs),
+                "char_confs": [float(c) for c in confs],
+            }
+        )
 
     status = "ok" if plates else "no_plate"
-    out = {
+    return {
         "status": status,
         "plates": plates,
         "latency_ms": {"det": det_ms, "ocr": ocr_ms, "total": det_ms + ocr_ms},
     }
-    print(json.dumps(out, ensure_ascii=False))
+
+
+def cmd_e2e_json(args: argparse.Namespace) -> int:
+    """Run detector + OCR on a single image and print JSON to stdout."""
+
+    import json
+
+    if args.iou < 0.0 or args.iou > 1.0:
+        print(json.dumps({"error": "--iou must be in [0,1]"}))
+        return 2
+
+    try:
+        from ocr_service.postprocess import postprocess_indonesia  # type: ignore
+        from inference.yolov9_trt import load_engine  # type: ignore
+    except Exception as exc:
+        print(json.dumps({"error": f"runtime dependencies missing: {exc}"}))
+        return 2
+
+    try:
+        backend, ocr_runner = _init_ocr_backend(args)
+    except Exception as exc:
+        print(json.dumps({"error": f"failed to initialize OCR backend: {exc}"}))
+        return 2
+
+    try:
+        det_engine = load_engine(args.det_engine, print_plugins=False)
+    except Exception as exc:
+        print(json.dumps({"error": f"failed to load detector: {exc}"}))
+        return 2
+
+    try:
+        result = _run_e2e_single(
+            args.source,
+            det_engine=det_engine,
+            ocr_runner=ocr_runner,
+            backend=backend,
+            conf=args.conf,
+            iou=args.iou,
+            postproc=args.postproc,
+            allowed_prefix=args.allowed_prefix or [],
+            postprocess_fn=postprocess_indonesia,
+        )
+    except Exception as exc:
+        print(json.dumps({"error": str(exc)}))
+        return 2
+
+    print(json.dumps(result, ensure_ascii=False))
+    return 0
+
+
+def cmd_e2e_json_stream(args: argparse.Namespace) -> int:
+    """Run detector + OCR once, then read image paths from stdin and emit NDJSON."""
+
+    import json
+    import sys
+
+    if args.iou < 0.0 or args.iou > 1.0:
+        print(json.dumps({"error": "--iou must be in [0,1]"}))
+        return 2
+
+    try:
+        from ocr_service.postprocess import postprocess_indonesia  # type: ignore
+        from inference.yolov9_trt import load_engine  # type: ignore
+    except Exception as exc:
+        print(json.dumps({"error": f"runtime dependencies missing: {exc}"}))
+        return 2
+
+    try:
+        backend, ocr_runner = _init_ocr_backend(args)
+    except Exception as exc:
+        print(json.dumps({"error": f"failed to initialize OCR backend: {exc}"}))
+        return 2
+
+    try:
+        det_engine = load_engine(args.det_engine, print_plugins=False)
+    except Exception as exc:
+        print(json.dumps({"error": f"failed to load detector: {exc}"}))
+        return 2
+
+    stop_on_error = bool(getattr(args, "stop_on_error", False))
+    for line in sys.stdin:
+        path = line.strip()
+        if not path:
+            continue
+        try:
+            result = _run_e2e_single(
+                path,
+                det_engine=det_engine,
+                ocr_runner=ocr_runner,
+                backend=backend,
+                conf=args.conf,
+                iou=args.iou,
+                postproc=args.postproc,
+                allowed_prefix=args.allowed_prefix or [],
+                postprocess_fn=postprocess_indonesia,
+            )
+            payload = {"input": path}
+            payload.update(result)
+            print(json.dumps(payload, ensure_ascii=False))
+            sys.stdout.flush()
+        except Exception as exc:
+            print(json.dumps({"input": path, "error": str(exc)}))
+            sys.stdout.flush()
+            if stop_on_error:
+                return 2
+
     return 0
 
 
@@ -581,6 +665,19 @@ def build_parser() -> argparse.ArgumentParser:
     p_e2e_json.add_argument("--postproc", choices=["none", "indonesia"], default="indonesia", help="Apply plate post-processing")
     p_e2e_json.add_argument("--allowed-prefix", nargs="*", default=["A","B","D","F","E","Z","T"], help="Allowed prefixes for postproc")
     p_e2e_json.set_defaults(func=cmd_e2e_json)
+
+    p_e2e_stream = sub.add_parser(
+        "e2e-json-stream",
+        help="Run detector + OCR once, then read image paths from stdin and emit JSON lines",
+    )
+    p_e2e_stream.add_argument("--det-engine", required=True, help="Path to detector TensorRT .engine")
+    p_e2e_stream.add_argument("--conf", type=float, default=0.5, help="Detection confidence threshold")
+    p_e2e_stream.add_argument("--iou", type=float, default=0.45, help="Detection IoU threshold")
+    _add_ocr_backend_args(p_e2e_stream)
+    p_e2e_stream.add_argument("--postproc", choices=["none", "indonesia"], default="indonesia", help="Apply plate post-processing")
+    p_e2e_stream.add_argument("--allowed-prefix", nargs="*", default=["A","B","D","F","E","Z","T"], help="Allowed prefixes for postproc")
+    p_e2e_stream.add_argument("--stop-on-error", action="store_true", help="Stop processing on first error")
+    p_e2e_stream.set_defaults(func=cmd_e2e_json_stream)
 
     return p
 

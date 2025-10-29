@@ -278,7 +278,8 @@ Status:
 * Lightweight offline validation: CLI `python -m alpr_jetson e2e` to run detector+OCR on still images before DS wiring.
 * Resource tuning on Jetson NX: expose ONNXRuntime provider choice (CUDA/CPU) and configurable CUDA allocator cap to prevent OOM during E2E runs; document recommended flags (e.g., `--onnx-provider cuda --onnx-gpu-mem-limit-mb 512`).
 * Add synchronous `/v1/alpr` HTTP endpoint (multipart) for integration tests; reuse detector/OCR runtimes with shared token auth and Prometheus counters.
-* Acceptance for this milestone: initial exact‑match plate accuracy; p95 end‑to‑end latency < 80 ms; `/healthz` and `/metrics` expose FPS and queue depth.
+* Document PHP integration path (duplicate mitigation, retry logic, OCR confidence gating) and provide a CLI streaming helper for temporary file-based ingestion loops.
+* Acceptance for this milestone: initial exact-match plate accuracy; p95 end-to-end latency < 80 ms; `/healthz` and `/metrics` expose FPS and queue depth.
 
 Status:
 - DS → OCR crop transport [http baseline implemented 2025-10-24]; ZeroMQ/IPC upgrade moves to Week 3.
@@ -288,6 +289,7 @@ Status:
 - Resource tuning flags implemented and documented [done].
 - New tooling: e2e text-only output option (stdout or file) [done].
 - Acceptance pending: requires live RTSP E2E and metrics wiring [open].
+- PHP integration doc + streaming CLI helper [done 2025-10-28]: docs/INTEGRATION_PHP.md plus CLI helpers (`e2e-json`, `e2e-json-stream`, wrapper script) ready for integration.
 
 Reflective adjustment:
 - Make HTTP bridge the explicit milestone for Week 2; move ZeroMQ/IPC upgrade to Week 3 (Day 15–16) for performance hardening.

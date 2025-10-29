@@ -2,7 +2,7 @@
 
 This file points to the most recent session log for quick access.
 
- - Latest session file: progress/2025-10-28_session-1.md
- - Status summary: Jetson compose updated with mounts and working dirs; added deploy README with clear run steps; CONTEXT refreshed. Next focus: API smoke tests in-container and IPC design draft.
+ - Latest session file: progress/2025-10-28_session-2.md
+ - Status summary: Documented PHP integration strategy (dedup, retries), added e2e-json-stream CLI for continuous ingestion, refreshed README/CONTEXT. Next focus: dry-run the stream CLI, align with PHP teammate, and draft the IPC plan.
 
 Source of truth remains plan.md §5 and the detailed session log referenced above.

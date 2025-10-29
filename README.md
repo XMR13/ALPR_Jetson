@@ -223,6 +223,19 @@ if (!$data) { /* tangani error */ }
 // $data['status'], $data['plates'][0]['text'], dst.
 ```
 
+Streaming NDJSON (satu proses, baca path dari stdin)
+
+```bash
+python -m alpr_jetson e2e-json-stream \
+  --det-engine models/detector/yolov9-s_plate_fp16.engine \
+  --onnx models/ocr/cct_s_v1_global.onnx \
+  --plate-config models/ocr/cct_s_v1_global_plate_config.yaml \
+  --conf 0.5 < paths.txt
+# paths.txt berisi satu path per baris; output: JSON line per gambar (dengan kolom "input")
+```
+
+Panduan lengkap (deduplikasi, retry, kualitas OCR) ada di `docs/INTEGRATION_PHP.md`.
+
 ONNX OCR — Mode Memori (Jetson NX)
 - Maksimum performa (tanpa batas GPU):
   - Tambahkan `--onnx-provider cuda --onnx-gpu-mem-limit-mb 0` (0 = tidak ada batasan)
