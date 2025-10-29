@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Deque, Dict, Optional, Tuple
+from typing import Any, Deque, Dict, Optional, Tuple, List
 
 from ocr_service.postprocess import MajorityVote
 
@@ -49,7 +49,7 @@ class TrackAggregator:
         frame_id: int,
         camera_id: str = "cam01",
         ts_iso: Optional[str] = None,
-        char_confs: Optional[list[float]] = None,
+        char_confs: Optional[List[float]] = None,
         det_ms: Optional[float] = None,
         ocr_ms: Optional[float] = None,
     ) -> Optional[Dict[str, Any]]:
@@ -118,4 +118,3 @@ class TrackAggregator:
         ]
         for tid in to_del:
             self.state.pop(tid, None)
-

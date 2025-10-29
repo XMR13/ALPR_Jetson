@@ -12,7 +12,7 @@ import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 from threading import Lock
-from typing import Any, Iterable, Optional, Sequence
+from typing import Any, Iterable, Optional, Sequence, Dict
 
 
 @dataclass(frozen=True)
@@ -30,7 +30,7 @@ class EventRecord:
     snapshot_path: Optional[str]
     char_confs: Sequence[float]
     status: str
-    raw_event: dict[str, Any]
+    raw_event: Dict[str, Any]
 
 
 class EventStore:
@@ -124,4 +124,3 @@ class EventStore:
 
 
 __all__ = ["EventRecord", "EventStore"]
-

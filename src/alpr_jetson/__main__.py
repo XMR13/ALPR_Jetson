@@ -1,7 +1,10 @@
+from __future__ import annotations
+
 import argparse
 import subprocess
 import sys
 from pathlib import Path
+from typing import List, Tuple
 
 #Menambahkan argumen untuk bakcend dari ocr
 def _add_ocr_backend_args(p: argparse.ArgumentParser) -> None:
@@ -411,7 +414,7 @@ def cmd_e2e(args: argparse.Namespace) -> int:
     return 0
 
 
-def _plate_conf(det_conf: float, char_confs: list[float]) -> float:
+def _plate_conf(det_conf: float, char_confs: List[float]) -> float:
     if not char_confs:
         return float(det_conf)
     avg_char = sum(char_confs) / max(1, len(char_confs))
@@ -427,7 +430,7 @@ def _run_e2e_single(
     conf: float,
     iou: float,
     postproc: str,
-    allowed_prefix: list[str],
+    allowed_prefix: List[str],
     postprocess_fn=None,
 ):
     import time

@@ -22,7 +22,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, Union
 
 try:  # Web framework
     from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request, UploadFile, WebSocket
@@ -85,7 +85,7 @@ except Exception:  # pragma: no cover
 LOGGER = logging.getLogger(__name__)
 
 
-def _env_list(name: str, default: Sequence[str] | None = None) -> List[str]:
+def _env_list(name: str, default: Optional[Sequence[str]] = None) -> List[str]:
     val = os.getenv(name)
     if not val:
         return list(default or [])
@@ -361,7 +361,7 @@ class _State:
     aggregator: TrackAggregator = field(default_factory=TrackAggregator)
 
 
-def create_app(cfg: Optional[AppConfig] = None) -> "FastAPI | None":
+def create_app(cfg: Optional[AppConfig] = None) -> "Optional[FastAPI]":
     if FastAPI is None:
         return None
 

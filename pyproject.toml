@@ -28,3 +28,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
+
+[tool.uv.scripts]
+guard = "bash tools/py38_guard.sh src"
+test = "pytest -q"

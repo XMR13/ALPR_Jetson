@@ -18,7 +18,7 @@ Jetson notes:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, Union
 
 import cv2  # type: ignore
 import numpy as np
@@ -71,7 +71,7 @@ def _resize_letterbox(
     image_color_mode: str,
     keep_aspect_ratio: bool,
     interpolation: str,
-    padding_color: Sequence[int] | int = (144, 144, 144),
+    padding_color: Union[Sequence[int], int] = (144, 144, 144),
 ) -> np.ndarray:
     inter = _INTERP.get(interpolation.lower(), cv2.INTER_LINEAR)
     if not keep_aspect_ratio:
@@ -115,7 +115,7 @@ def _decode_logits(
     alphabet: str,
     pad_char: str,
     return_confidence: bool = False,
-) -> List[str] | Tuple[List[str], List[List[float]]]:
+) -> Union[List[str], Tuple[List[str], List[List[float]]]]:
     arr = np.asarray(logits)
     if arr.ndim == 3:
         n, s, v = arr.shape
@@ -163,7 +163,7 @@ class PlateConfig:
     keep_aspect_ratio: bool = False
     interpolation: str = "linear"
     image_color_mode: str = "rgb"  # or "grayscale"
-    padding_color: Sequence[int] | int = (144, 144, 144)
+    padding_color: Union[Sequence[int], int] = (144, 144, 144)
     # Optional preprocessing (grayscale mode recommended for these)
     use_clahe: bool = False
     clahe_clip: float = 2.0
