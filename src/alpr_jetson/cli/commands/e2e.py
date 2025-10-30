@@ -55,6 +55,14 @@ def add_subcommands(sub):
     p_e2e.add_argument("--topk", type=int, default=d["topk"], help="Max plates per image to OCR (1=highest confidence only)")
     p_e2e.add_argument("--text-only", action="store_true", help="Print only plate texts (one per line)")
     p_e2e.add_argument("--text-out", default="", help="Optional path to write plate texts (one per line)")
+    p_e2e.add_argument(
+        "--strict-filters",
+        action="store_true",
+        help=(
+            "Enforce size/aspect filters like JSON path. By default e2e is permissive "
+            "(legacy behavior): accepts all detections above --conf/--iou and lets OCR/postproc decide."
+        ),
+    )
     add_ocr_backend_args(p_e2e)
     p_e2e.add_argument("--postproc", choices=["none", "indonesia"], default=d["postproc"], help="Apply plate post-processing")
     p_e2e.add_argument("--allowed-prefix", nargs="*", default=d["allowed_prefix"], help="Allowed prefixes for postproc")
@@ -249,6 +257,7 @@ def cmd_e2e(args: argparse.Namespace) -> int:
                 min_plate_h=getattr(args, "min_plate_h", 28),
                 min_ar=getattr(args, "min_ar", 1.5),
                 max_ar=getattr(args, "max_ar", 5.0),
+                accept_all=not bool(getattr(args, "strict_filters", False)),
                 topk=int(getattr(args, "topk", 1)),
             )
         except Exception as exc:

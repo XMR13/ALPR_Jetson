@@ -18,6 +18,10 @@ set -euo pipefail
 # - TEXT_ONLY=1: print only plate text (best) to stdout; exit 3 when no plate/invalid text
 # - ANNOTATE_DIR=/path/out: also save annotated image(s) using the same model args
 #
+# Optional outputs (TEXT_ONLY=1):
+# - TEXT_OUT_FILE=/path/out.txt  -> if set and RC==0, writes the plate text to this file
+# - TEXT_RC_FILE=/path/rc.txt    -> if set, writes the exit code (0/2/3) to this file
+#
 # Exit codes:
 #   0  success (JSON printed or text printed)
 #   2  usage/model/path/runtime error
@@ -44,7 +48,8 @@ fi
 # Defaults (can be overridden by env)
 OCR_BACKEND="${OCR_BACKEND:-onnx}"
 DET_ENGINE="${DET_ENGINE:-${REPO_ROOT}/models/detector/yolov9-s_plate_fp16.engine}"
-CONF="${CONF:-0.65}"
+# Match CLI e2e default
+CONF="${CONF:-0.5}"
 
 if [[ ! -f "$DET_ENGINE" ]]; then
   echo "error: detector engine not found: $DET_ENGINE" >&2
@@ -52,6 +57,11 @@ if [[ ! -f "$DET_ENGINE" ]]; then
 fi
 
 ARGS=( -m alpr_jetson e2e-json --det-engine "$DET_ENGINE" --source "$IMAGE" --conf "$CONF" )
+# Make JSON path permissive by default to mirror e2e behavior
+ACCEPT_ALL="${ACCEPT_ALL:-1}"
+if [[ "$ACCEPT_ALL" == "1" ]]; then
+  ARGS+=( --accept-all )
+fi
 
 case "$OCR_BACKEND" in
   trt)
@@ -137,8 +147,16 @@ sys.exit(0)
 PY
 <<< "$JSON_OUT" )
   RC=$?
+  # Optionally write exit code to file
+  if [[ -n "${TEXT_RC_FILE:-}" ]]; then
+    printf '%s\n' "$RC" > "$TEXT_RC_FILE" || true
+  fi
   if [[ $RC -ne 0 ]]; then
     exit $RC
+  fi
+  # Optionally write text to file
+  if [[ -n "${TEXT_OUT_FILE:-}" ]]; then
+    printf '%s\n' "$TEXT" > "$TEXT_OUT_FILE" || true
   fi
   printf '%s\n' "$TEXT"
   exit 0
