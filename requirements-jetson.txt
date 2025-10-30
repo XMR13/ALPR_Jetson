@@ -11,7 +11,7 @@ pyyaml
 numpy
 python-multipart
 onnxruntime-gpu
+pyzmq
 
 # Local editable install for project modules.
 -e .
-

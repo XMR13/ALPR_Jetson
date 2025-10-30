@@ -1,0 +1,12 @@
+ipc:
+  enabled: false
+  endpoint: "ipc:///tmp/alpr.ds2ocr.sock"
+  jpeg_quality: 90
+  snd_hwm: 256
+  rcv_hwm: 256
+  send_timeout_ms: 10
+  recv_timeout_ms: 1000
+  workers: 1
+  batch_size: 1
+  cleanup_socket: true
+

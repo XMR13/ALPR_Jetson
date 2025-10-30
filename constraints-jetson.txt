@@ -8,4 +8,4 @@ pyyaml==6.0.1
 numpy==1.23.5
 python-multipart==0.0.9
 onnxruntime-gpu==1.16.3
-
+pyzmq==25.1.2
