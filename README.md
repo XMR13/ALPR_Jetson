@@ -205,22 +205,39 @@ python -m alpr_jetson e2e-json \
 Wrapper sederhana (hanya butuh path gambar)
 
 ```bash
-# Default backend: TensorRT OCR (ubah ke ONNX dengan OCR_BACKEND=onnx)
+# Default backend: ONNX OCR (ubah ke TRT dengan OCR_BACKEND=trt)
 tools/alpr_e2e_json.sh /path/to/frame.jpg
 
-# Override contoh:
-OCR_BACKEND=onnx tools/alpr_e2e_json.sh /path/to/frame.jpg
+# ONNX (eksplisit) dan keluaran teks saja (exit code 3 jika gagal deteksi/recognize)
+TEXT_ONLY=1 OCR_BACKEND=onnx tools/alpr_e2e_json.sh /path/to/frame.jpg
+
+# Simpan anotasi juga (selain JSON/teks)
+ANNOTATE_DIR=export/ann tools/alpr_e2e_json.sh /path/to/frame.jpg
 ```
 
 Contoh PHP (minimal) memanggil CLI dan membaca JSON:
 
 ```php
 $img = '/tmp/frame.jpg';
-$cmd = escapeshellcmd('tools/alpr_e2e_json.sh ' . $img);
+// JSON mode (default)
+$cmd = 'tools/alpr_e2e_json.sh ' . escapeshellarg($img);
 $json = shell_exec($cmd);
 $data = json_decode($json, true);
 if (!$data) { /* tangani error */ }
 // $data['status'], $data['plates'][0]['text'], dst.
+
+// TEXT_ONLY mode (disarankan untuk Webmin)
+$cmd = 'TEXT_ONLY=1 tools/alpr_e2e_json.sh ' . escapeshellarg($img);
+$out = [];
+$rc = 1;
+exec($cmd, $out, $rc);
+if ($rc === 0) {
+    $plate = trim(implode("\n", $out)); // teks plat saja
+} else if ($rc === 3) {
+    // tidak ada plat atau teks invalid
+} else {
+    // error penggunaan / model / path
+}
 ```
 
 Streaming NDJSON (satu proses, baca path dari stdin)

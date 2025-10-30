@@ -21,6 +21,8 @@ This note covers how to connect a PHP application to the Jetson-based ALPR pipel
     --plate-config models/ocr/cct_s_v1_global_plate_config.yaml
   ```
 - `tools/alpr_e2e_json.sh`: wrapper that only requires an image path; ideal when PHP spawns a subprocess.
+  - Text-only: `TEXT_ONLY=1 tools/alpr_e2e_json.sh /path/to/frame.jpg` → prints only best plate text to stdout; exits 3 when no/invalid text.
+  - Annotate: `ANNOTATE_DIR=/var/www/ann tools/alpr_e2e_json.sh /path/to/frame.jpg` → also saves annotated visualization.
 
 ## 3. Handling Continuous Image Streams
 
@@ -93,8 +95,38 @@ foreach ($images as $imgPath) {
 ## 6. Tooling Checklist
 - `python -m alpr_jetson e2e-json …` – one-shot JSON.
 - `python -m alpr_jetson e2e-json-stream …` – NDJSON stream (stdin).
-- `tools/alpr_e2e_json.sh` – simple wrapper for PHP (`$cmd = 'tools/alpr_e2e_json.sh '.$img;`).
+- `tools/alpr_e2e_json.sh` – simple wrapper for PHP (use `escapeshellarg($img)`):
+  - JSON mode: `$cmd = 'tools/alpr_e2e_json.sh ' . escapeshellarg($img);`
+  - TEXT_ONLY mode: `$cmd = 'TEXT_ONLY=1 tools/alpr_e2e_json.sh ' . escapeshellarg($img);`
 - `/v1/alpr` HTTP endpoint – production target.
+
+### Exit Codes (wrapper)
+- 0: success (JSON printed or text printed)
+- 2: usage/model/path/runtime error
+- 3: TEXT_ONLY mode only — no plate detected or text invalid/empty
+
+### PHP Examples
+JSON mode (default):
+```php
+$cmd = 'tools/alpr_e2e_json.sh ' . escapeshellarg($img);
+$json = shell_exec($cmd);
+$data = json_decode($json, true);
+```
+
+TEXT_ONLY with ONNX and annotation:
+```php
+$cmd = 'TEXT_ONLY=1 OCR_BACKEND=onnx ANNOTATE_DIR=/var/www/plates tools/alpr_e2e_json.sh ' . escapeshellarg($img);
+$out = [];
+$rc = 1;
+exec($cmd, $out, $rc);
+if ($rc === 0) {
+    $plate = trim(implode("\n", $out));
+} else if ($rc === 3) {
+    // No plate or OCR invalid
+} else {
+    // Usage/model/path error
+}
+```
 
 ## 7. Next Steps
 - Integrate redis/SQLite to store processed hashes if the PHP process restarts frequently.
@@ -102,4 +134,3 @@ foreach ($images as $imgPath) {
 - When DeepStream emits crops via IPC (Week 3 milestone), push events into the API without PHP polling.
 
 For questions or updates, sync with plan.md §5 (Week 2 Day 12–13) and progress logs.
-
