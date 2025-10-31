@@ -39,6 +39,8 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 # Ensure Python can import the package if not installed
 export PYTHONPATH="${PYTHONPATH:-${REPO_ROOT}/src}"
+# Prefer python3 if available
+PY_BIN="${PYTHON_BIN:-$(command -v python3 || command -v python || echo python)}"
 
 if [[ $# -lt 1 ]];
 then
@@ -126,15 +128,14 @@ case "$OCR_BACKEND" in
     ;;
 esac
 
-# Run JSON pipeline and capture output (do not exit on non-zero here)
+# Run JSON pipeline and capture only the last non-empty line (expected to be JSON)
 set +e
-JSON_OUT=$(python "${ARGS[@]}" 2>/dev/null)
+JSON_OUT=$("${PY_BIN}" "${ARGS[@]}" 2>/dev/null | awk 'NF{last=$0} END{if (last) print last}')
 RC=$?
 set -e
-if [[ $RC -ne 0 ]]; then
-  # Propagate usage/model/runtime errors; echo captured text (may contain JSON error)
-  [[ -n "$JSON_OUT" ]] && echo "$JSON_OUT"
-  exit $RC
+if [[ $RC -ne 0 || -z "$JSON_OUT" ]]; then
+  echo "{\"error\": \"failed to parse JSON output\"}"
+  exit 2
 fi
 
 # If ANNOTATE_DIR requested, run annotate path (best effort; does not affect rc)
@@ -157,27 +158,27 @@ if [[ -n "${ANNOTATE_DIR:-}" ]]; then
       ;;
   esac
   set +e
-  python "${ANN_ARGS[@]}" >/dev/null 2>&1
+  "${PY_BIN}" "${ANN_ARGS[@]}" >/dev/null 2>&1
   set -e
 fi
 
 if [[ "${TEXT_ONLY:-}" == "1" ]]; then
   # Print only best plate text; supports raw/allow_invalid/no_plate placeholder
-  TEXT=$(python - <<'PY'
+  set +e
+  if [[ -n "${TEXT_OUT_FILE:-}" ]]; then
+    printf '%s\n' "$JSON_OUT" \
+      | "${PY_BIN}" - <<'PY' \
+      | tee "$TEXT_OUT_FILE"
 import os, sys, json
 mode = os.getenv('TEXT_MODE', 'best').lower()  # 'best' or 'raw'
 allow_invalid = os.getenv('TEXT_ALLOW_INVALID', '0') in ('1','true','True')
-data = sys.stdin.read()
 try:
-    d = json.loads(data)
+    d = json.load(sys.stdin)
 except Exception:
     sys.exit(2)
-if d.get('status') != 'ok':
+if d.get('status') != 'ok' or not d.get('plates'):
     sys.exit(3)
-plates = d.get('plates') or []
-if not plates:
-    sys.exit(3)
-best = plates[0]
+best = d['plates'][0]
 text_best = (best.get('text') or '').strip()
 text_raw = (best.get('ocr_raw') or '').strip()
 valid = bool(best.get('valid', False))
@@ -186,18 +187,52 @@ if mode == 'raw':
         print(text_raw)
         sys.exit(0)
     sys.exit(3)
-else:  # best (normalized)
+else:
+    # best (normalized)
     if text_best and (valid or allow_invalid):
-        print(text_best if text_best else text_raw)
+        print(text_best)
         sys.exit(0)
-    # fall back to raw if allowed
     if allow_invalid and text_raw:
         print(text_raw)
         sys.exit(0)
     sys.exit(3)
 PY
-<<< "$JSON_OUT" )
-  RC=$?
+    RC=${PIPESTATUS[1]}
+  else
+    printf '%s\n' "$JSON_OUT" \
+      | "${PY_BIN}" - <<'PY'
+import os, sys, json
+mode = os.getenv('TEXT_MODE', 'best').lower()  # 'best' or 'raw'
+allow_invalid = os.getenv('TEXT_ALLOW_INVALID', '0') in ('1','true','True')
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    sys.exit(2)
+if d.get('status') != 'ok' or not d.get('plates'):
+    sys.exit(3)
+best = d['plates'][0]
+text_best = (best.get('text') or '').strip()
+text_raw = (best.get('ocr_raw') or '').strip()
+valid = bool(best.get('valid', False))
+if mode == 'raw':
+    if text_raw:
+        print(text_raw)
+        sys.exit(0)
+    sys.exit(3)
+else:
+    # best (normalized)
+    if text_best and (valid or allow_invalid):
+        print(text_best)
+        sys.exit(0)
+    if allow_invalid and text_raw:
+        print(text_raw)
+        sys.exit(0)
+    sys.exit(3)
+PY
+    RC=$?
+  fi
+  set -e
+
   # Optionally write exit code to file
   if [[ -n "${TEXT_RC_FILE:-}" ]]; then
     printf '%s\n' "$RC" > "$TEXT_RC_FILE" || true
@@ -209,14 +244,9 @@ PY
     fi
     exit $RC
   fi
-  # Optionally write text to file
-  if [[ -n "${TEXT_OUT_FILE:-}" ]]; then
-    printf '%s\n' "$TEXT" > "$TEXT_OUT_FILE" || true
-  fi
-  printf '%s\n' "$TEXT"
   exit 0
 fi
 
-# Default: print JSON
+# Default: print only the cleaned JSON line
 printf '%s\n' "$JSON_OUT"
 exit 0

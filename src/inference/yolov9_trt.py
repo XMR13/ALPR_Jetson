@@ -88,7 +88,8 @@ def _load_trt_plugins(logger):
     try:
         trt.init_libnvinfer_plugins(logger, "")
     except Exception as e:
-        print(f"[WARN] init_libnvinfer_plugins() failed: {e}")
+        import sys
+        print(f"[WARN] init_libnvinfer_plugins() failed: {e}", file=sys.stderr)
 
     # 2) Custom .so plugins
     plugin_dir = os.environ.get("TRT_PLUGIN_PATH", "")
@@ -96,16 +97,20 @@ def _load_trt_plugins(logger):
         for so in glob.glob(os.path.join(plugin_dir, "*.so")):
             try:
                 ctypes.CDLL(so, mode=ctypes.RTLD_GLOBAL)
-                print(f"[TRT] Loaded custom plugin: {so}")
+                import sys
+                print(f"[TRT] Loaded custom plugin: {so}", file=sys.stderr)
             except OSError as e:
-                print(f"[TRT] Failed to load {so}: {e}")
+                import sys
+                print(f"[TRT] Failed to load {so}: {e}", file=sys.stderr)
 
 def _print_registered_plugins():
     reg = trt.get_plugin_registry()
     creators = reg.plugin_creator_list
-    print("[TRT] Registered plugin creators:")
+    import sys
+    print("[TRT] Registered plugin creators:", file=sys.stderr)
     for c in creators:
-        print(f" - {c.name} v{c.plugin_version} ns='{c.plugin_namespace}'")
+        import sys
+        print(f" - {c.name} v{c.plugin_version} ns='{c.plugin_namespace}'", file=sys.stderr)
 
 # ---- Safe dtype resolver that avoids trt.nptype (and np.bool) ----
 def trt_dtype_to_np(dt):
@@ -128,7 +133,8 @@ def trt_dtype_to_np(dt):
 # ----------------- TensorRT wrapper -----------------
 class TRTModule:
     def __init__(self, engine_path, print_plugins=False):
-        logger = trt.Logger(trt.Logger.INFO)
+        # Reduce TensorRT log verbosity to keep stdout clean for JSON/text consumers
+        logger = trt.Logger(trt.Logger.ERROR)
         _load_trt_plugins(logger)  # ensure plugins are registered
 
         with open(engine_path, 'rb') as f, trt.Runtime(logger) as runtime:

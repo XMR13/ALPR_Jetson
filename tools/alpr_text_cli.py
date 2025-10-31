@@ -45,8 +45,9 @@ def main() -> int:
             print(f"missing {name} file: {p}", file=sys.stderr)
             return 2
 
+    # Use JSON path and parse robustly to avoid mixed logs on stdout
     cmd = [
-        sys.executable, "-m", "alpr_jetson", "e2e",
+        sys.executable, "-m", "alpr_jetson", "e2e-json",
         "--det-engine", det,
         "--onnx", onnx,
         "--plate-config", plate,
@@ -54,26 +55,37 @@ def main() -> int:
         "--conf", str(conf),
         "--iou", str(iou),
         "--topk", str(topk),
-        "--text-only",
     ]
 
-    proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    # If the CLI returns non-zero, forward its rc and stderr
+    env = os.environ.copy()
+    # Ensure package imports resolve even without editable install
+    repo_src = str(Path(__file__).resolve().parents[1] / "src")
+    if os.path.isdir(repo_src):
+        env.setdefault("PYTHONPATH", repo_src)
+    proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, env=env)
     if proc.returncode != 0:
-        sys.stderr.write(proc.stderr)
         return proc.returncode
 
-    # The e2e text-only prints one line per detected plate; output the first non-empty
-    for line in proc.stdout.splitlines():
-        s = line.strip()
-        if s:
-            print(s)
-            return 0
+    try:
+        import json
+        s = (proc.stdout or "").splitlines()
+        lines = [ln.strip() for ln in s if ln.strip()]
+        if not lines:
+            return 2
+        d = json.loads(lines[-1])
+    except Exception:
+        return 2
 
-    # No text printed by e2e (no plate)
-    return 3
+    if d.get("status") != "ok" or not d.get("plates"):
+        return 3
+    best = d["plates"][0]
+    text = (best.get("text") or "").strip()
+    valid = bool(best.get("valid", False))
+    if not text or not valid:
+        return 3
+    print(text)
+    return 0
 
 
 if __name__ == "__main__":
     sys.exit(main())
-
