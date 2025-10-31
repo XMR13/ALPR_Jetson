@@ -80,7 +80,8 @@ def add_subcommands(sub):
     p_e2e_json.add_argument("--postproc", choices=["none", "indonesia"], default=d["postproc"], help="Apply plate post-processing")
     p_e2e_json.add_argument("--allowed-prefix", nargs="*", default=d["allowed_prefix"], help="Allowed prefixes for postproc")
     p_e2e_json.add_argument("--debug-crops", action="store_true", help="Include crop acceptance debug info in JSON")
-    p_e2e_json.add_argument("--topk", type=int, default=d["topk"], help="Max plates per image to OCR (1=highest confidence only)")
+    p_e2e_json.add_argument("--topk", type
+    =int, default=d["topk"], help="Max plates per image to OCR (1=highest confidence only)")
     p_e2e_json.add_argument("--accept-all", action="store_true", help="Bypass size/AR filters (debug)")
     p_e2e_json.set_defaults(func=cmd_e2e_json)
 

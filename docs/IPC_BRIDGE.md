@@ -120,9 +120,49 @@ Operational Notes
 
 Integration Plan
 1) Implement OCR-side PULL server in `src/ocr_service/app.py` (toggle via config).
-2) Add C++ sender in `src/deepstream_app/crop_probe.cpp` guarded by a compile-time flag.
+2) Add C++ sender in `src/deepstream_app/crop_probe.cpp` guarded by a compile-time flag. ✅ Stub implemented (ZeroMQ PUSH, env toggles `ALPR_DS_IPC_*`).
 3) Expose metrics to `/metrics` and systemd journals.
 4) E2E soak test: 1–2 hours; capture queue stats, latency, drop rates.
+
+### Testing the C++ Stub (workstation or Jetson)
+
+1. Build the sender harness (ships in `tools/ds_ipc_sender_stub.cpp`) linking OpenCV + ZeroMQ:
+
+```bash
+g++ -std=c++17 -I/usr/include/opencv4 \
+    tools/ds_ipc_sender_stub.cpp \
+    src/deepstream_app/crop_probe.cpp \
+    -lopencv_core -lopencv_imgcodecs -lzmq -o build/ipc_sender_stub
+```
+
+2. Run a Python receiver to confirm framing:
+
+```bash
+python - <<'PY'
+import json, zmq
+ctx = zmq.Context.instance()
+sock = ctx.socket(zmq.PULL)
+sock.bind('ipc:///tmp/alpr.ds2ocr.sock')
+hdr = json.loads(sock.recv())
+payload = sock.recv()
+print('header:', hdr)
+print('payload-bytes:', len(payload))
+PY
+```
+
+3. From another shell, export runtime vars and send a dummy crop:
+
+```bash
+export ALPR_DS_IPC_ENABLED=1
+export ALPR_DS_IPC_ENDPOINT=ipc:///tmp/alpr.ds2ocr.sock
+export ALPR_DS_IPC_LOG=1
+./build/ipc_sender_stub /path/to/crop.jpg
+```
+
+4. Verify receiver prints the header (`encoding=jpeg`, `camera_id`, etc.) and payload length.
+
+At runtime, `send_crop_over_ipc` can be invoked from the DeepStream probe with a `cv::Mat` crop and `CropMetadata` (camera, track, bbox). When libzmq or OpenCV is unavailable, the helper no-ops safely.
+
 
 Config Snippet (YAML)
 ```yaml
@@ -137,4 +177,3 @@ ipc:
   workers: 2
   batch_size: 8
 ```
-
