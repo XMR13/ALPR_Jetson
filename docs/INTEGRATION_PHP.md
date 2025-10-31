@@ -21,8 +21,15 @@ This note covers how to connect a PHP application to the Jetson-based ALPR pipel
     --plate-config models/ocr/cct_s_v1_global_plate_config.yaml
   ```
 - `tools/alpr_e2e_json.sh`: wrapper that only requires an image path; ideal when PHP spawns a subprocess.
-  - Text-only: `TEXT_ONLY=1 tools/alpr_e2e_json.sh /path/to/frame.jpg` → prints only best plate text to stdout; exits 3 when no/invalid text.
+  - Text-only: `TEXT_ONLY=1 tools/alpr_e2e_json.sh /path/to/frame.jpg` → prints only best plate text to stdout; defaults to exit 3 when no/invalid text (see options below for fallbacks).
   - Annotate: `ANNOTATE_DIR=/var/www/ann tools/alpr_e2e_json.sh /path/to/frame.jpg` → also saves annotated visualization.
+
+  Wrapper controls (env):
+  - `POSTPROC=indonesia|none` — override CLI default post-processing.
+  - `ALLOWED_PREFIX="B D F ..."` — space/comma-separated allowed prefixes when using `indonesia` post-proc.
+  - `TEXT_MODE=best|raw` — print normalized text (`best`, default) or raw OCR (`raw`).
+  - `TEXT_ALLOW_INVALID=1` — print text even when `valid=false` (useful for triage or permissive flows).
+  - `TEXT_NO_PLATE=NO_PLATE` — when rc=3, still print this placeholder to stdout (exit code remains 3).
 
 ## 3. Handling Continuous Image Streams
 
@@ -115,14 +122,14 @@ $data = json_decode($json, true);
 
 TEXT_ONLY with ONNX and annotation:
 ```php
-$cmd = 'TEXT_ONLY=1 OCR_BACKEND=onnx ANNOTATE_DIR=/var/www/plates tools/alpr_e2e_json.sh ' . escapeshellarg($img);
+$cmd = 'TEXT_ONLY=1 TEXT_ALLOW_INVALID=1 OCR_BACKEND=onnx ANNOTATE_DIR=/var/www/plates tools/alpr_e2e_json.sh ' . escapeshellarg($img);
 $out = [];
 $rc = 1;
 exec($cmd, $out, $rc);
 if ($rc === 0) {
     $plate = trim(implode("\n", $out));
 } else if ($rc === 3) {
-    // No plate or OCR invalid
+    // No plate or OCR invalid — optionally set TEXT_NO_PLATE=NO_PLATE to emit a placeholder
 } else {
     // Usage/model/path error
 }

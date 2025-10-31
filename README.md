@@ -208,8 +208,16 @@ Wrapper sederhana (hanya butuh path gambar)
 # Default backend: ONNX OCR (ubah ke TRT dengan OCR_BACKEND=trt)
 tools/alpr_e2e_json.sh /path/to/frame.jpg
 
-# ONNX (eksplisit) dan keluaran teks saja (exit code 3 jika gagal deteksi/recognize)
-TEXT_ONLY=1 OCR_BACKEND=onnx tools/alpr_e2e_json.sh /path/to/frame.jpg
+# ONNX (eksplisit) dan keluaran teks saja
+# Catatan TEXT_ONLY:
+#  - Default hanya mencetak teks yang valid (sesuai post-proc). Jika tidak valid/No plate → exit 3 tanpa output.
+#  - Opsi tambahan:
+#      TEXT_MODE=raw             -> cetak ocr_raw (tanpa normalisasi)
+#      TEXT_ALLOW_INVALID=1      -> cetak teks meski valid=false
+#      TEXT_NO_PLATE=NO_PLATE    -> saat rc=3, tetap cetak placeholder "NO_PLATE" ke stdout
+#      POSTPROC=none|indonesia   -> override post-proc
+#      ALLOWED_PREFIX="B D F ..." -> batasi prefix (spasi atau koma)
+TEXT_ONLY=1 OCR_BACKEND=onnx TEXT_ALLOW_INVALID=1 tools/alpr_e2e_json.sh /path/to/frame.jpg
 
 # Simpan anotasi juga (selain JSON/teks)
 ANNOTATE_DIR=export/ann tools/alpr_e2e_json.sh /path/to/frame.jpg

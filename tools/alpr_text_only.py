@@ -68,6 +68,7 @@ def main() -> int:
     iou = float(os.getenv("IOU", "0.45"))
     topk = int(os.getenv("TOPK", "1"))
     onnx_gpu_mem_mb = int(os.getenv("ONNX_GPU_MEM_MB", "512"))
+    onnx_provider = os.getenv("ONNX_PROVIDER", "cuda").lower()
     raw_fallback = os.getenv("RAW_FALLBACK", "1") in ("1", "true", "True")
 
     # Validate files
@@ -121,17 +122,37 @@ def main() -> int:
         _err(f"failed to read plate config: {exc}")
         return 2
 
+    # Initialize ONNX first to reduce CUDA primary-context conflicts, then TRT
     try:
-        det_engine = load_engine(det_engine_path, print_plugins=False)
         ocr_runner = OnnxPlateOCR(
             ocr_onnx_path,
             plate_cfg,
             prefer_trt=False,
-            provider="cuda",
+            provider=onnx_provider,
             gpu_mem_limit_mb=onnx_gpu_mem_mb,
         )
     except Exception as exc:
-        _err(f"failed to initialize models: {exc}")
+        # Fallback to CPU if CUDA init fails and provider was not forced to CPU
+        if onnx_provider != "cpu":
+            try:
+                ocr_runner = OnnxPlateOCR(
+                    ocr_onnx_path,
+                    plate_cfg,
+                    prefer_trt=False,
+                    provider="cpu",
+                    gpu_mem_limit_mb=None,
+                )
+            except Exception as exc2:
+                _err(f"failed to init ONNX OCR: {exc2}")
+                return 2
+        else:
+            _err(f"failed to init ONNX OCR: {exc}")
+            return 2
+
+    try:
+        det_engine = load_engine(det_engine_path, print_plugins=False)
+    except Exception as exc:
+        _err(f"failed to load detector engine: {exc}")
         return 2
 
     try:
@@ -168,4 +189,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
