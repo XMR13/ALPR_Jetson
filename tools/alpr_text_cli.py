@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-"""Proxy text-only runner that shells out to the known-good CLI (e2e).
+"""Wrapper untuk mengoutputkan hanya text plat saja.
 
-Why: avoids CUDA context issues by delegating to the existing pipeline.
+Why: Command line mudah untuk menjalankan program deteksi yang mengoutputkan tex.
 
-Usage:
+Penggunaan:
   python tools/alpr_text_cli.py /abs/path/image.jpg
 
-Defaults (override via env):
+Defaults (melakuakn override dengan env):
   DET_ENGINE   = models/detector/yolov9-s_plate_fp16.engine
   OCR_ONNX     = models/ocr/cct_s_v1_global.onnx
   PLATE_CONFIG = models/ocr/cct_s_v1_global_plate_config.yaml
-  CONF         = 0.5
+  CONF         = 0.65
   IOU          = 0.45
   TOPK         = 1
 """
@@ -25,7 +25,7 @@ from pathlib import Path
 
 def main() -> int:
     if len(sys.argv) < 2:
-        print("Usage: python tools/alpr_text_cli.py /path/to/image.jpg", file=sys.stderr)
+        print("Cara penggunaan: python tools/alpr_text_cli.py /path/to/image.jpg", file=sys.stderr)
         return 2
     img = Path(sys.argv[1]).resolve()
     if not img.is_file():
@@ -36,7 +36,7 @@ def main() -> int:
     det = os.getenv("DET_ENGINE", str(repo / "models/detector/yolov9-s_plate_fp16.engine"))
     onnx = os.getenv("OCR_ONNX", str(repo / "models/ocr/cct_s_v1_global.onnx"))
     plate = os.getenv("PLATE_CONFIG", str(repo / "models/ocr/cct_s_v1_global_plate_config.yaml"))
-    conf = os.getenv("CONF", "0.5")
+    conf = os.getenv("CONF", "0.65")
     iou = os.getenv("IOU", "0.45")
     topk = os.getenv("TOPK", "1")
 
@@ -45,7 +45,7 @@ def main() -> int:
             print(f"missing {name} file: {p}", file=sys.stderr)
             return 2
 
-    # Use JSON path and parse robustly to avoid mixed logs on stdout
+    #menggunakan path dan print secara robust untuk menghilangkan logs di stdout
     cmd = [
         sys.executable, "-m", "alpr_jetson", "e2e-json",
         "--det-engine", det,
@@ -58,7 +58,7 @@ def main() -> int:
     ]
 
     env = os.environ.copy()
-    # Ensure package imports resolve even without editable install
+    # memastikan package sudha sesuai degnn import dan tidka terkena eror
     repo_src = str(Path(__file__).resolve().parents[1] / "src")
     if os.path.isdir(repo_src):
         env.setdefault("PYTHONPATH", repo_src)

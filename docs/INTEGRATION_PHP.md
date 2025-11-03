@@ -20,7 +20,7 @@ This note covers how to connect a PHP application to the Jetson-based ALPR pipel
     --onnx models/ocr/cct_s_v1_global.onnx \
     --plate-config models/ocr/cct_s_v1_global_plate_config.yaml
   ```
-- `tools/alpr_e2e_json.sh`: wrapper that only requires an image path; ideal when PHP spawns a subprocess.
+- `tools/alpr_e2e_json.sh`: wrapper that only requires an image path; ideal when PHP spawns a subprocess or when you explicitly disable streaming (see `USE_STREAM=0` below).
   - Text-only: `TEXT_ONLY=1 tools/alpr_e2e_json.sh /path/to/frame.jpg` → prints only best plate text to stdout; defaults to exit 3 when no/invalid text (see options below for fallbacks).
   - Annotate: `ANNOTATE_DIR=/var/www/ann tools/alpr_e2e_json.sh /path/to/frame.jpg` → also saves annotated visualization.
 
@@ -138,8 +138,11 @@ if ($rc === 0) {
 ### PHP Helper Template
 - File: `tools/php/alpr_cli_template.php`
 - Fungsi utama: `run_alpr($imagePath, $textOnly = false, $envOverrides = [])`
+  - Default mode keeps a warm `e2e-json-stream` process alive so subsequent calls avoid model reload latency (~150 ms steady once hot).
+  - Set `USE_STREAM=0` (or export `ALPR_PHP_USE_STREAM=0`) when you need wrapper-specific features such as `ANNOTATE_DIR` or when debugging with single-shot runs.
   - Mengembalikan array dengan kunci `ok`, `exit_code`, `stdout`, `stderr`, dan `data` (jika sukses).
   - Sudah men-setup `PYTHONPATH`, `DET_ENGINE`, `OCR_ONNX`, dan `PLATE_CONFIG` sesuai struktur repo; override via `$envOverrides` jika path berbeda.
+- Text-only helpers mirror the shell wrapper semantics (`TEXT_MODE`, `TEXT_ALLOW_INVALID`, `TEXT_NO_PLATE`, `TEXT_OUT_FILE`, `TEXT_RC_FILE`) but are now computed inside PHP so JSON output tetap tersedia untuk logging.
 - Termasuk contoh handler upload (`$_FILES['image']`) yang merespon JSON langsung ke client.
 - Untuk uji lokal CLI: `php tools/php/alpr_cli_template.php` (tambah logika Anda sendiri) atau panggil fungsi dari aplikasi Anda.
 

@@ -227,6 +227,7 @@ TEXT_ONLY=1 OCR_BACKEND=onnx TEXT_ALLOW_INVALID=1 tools/alpr_e2e_json.sh /path/t
 ANNOTATE_DIR=export/ann tools/alpr_e2e_json.sh /path/to/frame.jpg
 ```
 - Template PHP siap pakai: lihat `tools/php/alpr_cli_template.php` (panduan di `docs/INTEGRATION_PHP.md`).
+  - Helper menjaga proses `e2e-json-stream` tetap hidup antar panggilan (latency lebih rendah). Set `USE_STREAM=0` bila perlu kembali ke mode sekali jalan, misalnya saat mengaktifkan `ANNOTATE_DIR`.
 
 Contoh PHP (minimal) memanggil CLI dan membaca JSON:
 
