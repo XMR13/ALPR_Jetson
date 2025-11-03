@@ -3,11 +3,36 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from pathlib import Path
 from typing import List
 
 from alpr_jetson.cli.common import add_ocr_backend_args, init_ocr_backend
 from pipeline.alpr_runner import run_e2e_single  # type: ignore
+
+
+def _percentile(sorted_vals: List[float], pct: float) -> float:
+    if not sorted_vals:
+        return 0.0
+    if pct <= 0.0:
+        return sorted_vals[0]
+    if pct >= 100.0:
+        return sorted_vals[-1]
+    pos = (pct / 100.0) * (len(sorted_vals) - 1)
+    lower = int(pos)
+    upper = min(lower + 1, len(sorted_vals) - 1)
+    frac = pos - lower
+    return sorted_vals[lower] + (sorted_vals[upper] - sorted_vals[lower]) * frac
+
+
+def _format_stats(values: List[float]) -> str:
+    if not values:
+        return "n/a"
+    sorted_vals = sorted(values)
+    avg = sum(sorted_vals) / float(len(sorted_vals))
+    p50 = _percentile(sorted_vals, 50.0)
+    p95 = _percentile(sorted_vals, 95.0)
+    return f"avg={avg:.2f} p50={p50:.2f} p95={p95:.2f} max={sorted_vals[-1]:.2f}"
 
 
 def _load_defaults():
@@ -55,6 +80,16 @@ def add_subcommands(sub):
     p_e2e.add_argument("--topk", type=int, default=d["topk"], help="Max plates per image to OCR (1=highest confidence only)")
     p_e2e.add_argument("--text-only", action="store_true", help="Print only plate texts (one per line)")
     p_e2e.add_argument("--text-out", default="", help="Optional path to write plate texts (one per line)")
+    p_e2e.add_argument(
+        "--stats",
+        action="store_true",
+        help="Print latency/FPS summary to stderr after processing all images (disabled by default)",
+    )
+    p_e2e.add_argument(
+        "--stats-file",
+        default="",
+        help="Optional path to write the latency/FPS summary (implies --stats)",
+    )
     p_e2e.add_argument(
         "--strict-filters",
         action="store_true",
@@ -169,11 +204,21 @@ def cmd_e2e_json_stream(args: argparse.Namespace) -> int:
         return 2
 
     stop_on_error = bool(getattr(args, "stop_on_error", False))
+
+    lat_total: List[float] = []
+    lat_det: List[float] = []
+    lat_ocr: List[float] = []
+    lat_iter: List[float] = []
+    processed = 0
+    errors = 0
+    start_ts = time.perf_counter()
+
     for line in sys.stdin:
         path = line.strip()
         if not path:
             continue
         try:
+            iter_start = time.perf_counter()
             result = run_e2e_single(
                 path,
                 det_engine=det_engine,
@@ -193,13 +238,38 @@ def cmd_e2e_json_stream(args: argparse.Namespace) -> int:
             )
             payload = {"input": path}
             payload.update(result)
+            iter_ms = (time.perf_counter() - iter_start) * 1000.0
+            lat = payload.get("latency_ms")
+            if isinstance(lat, dict):
+                lat_det.append(float(lat.get("det", 0.0)))
+                lat_ocr.append(float(lat.get("ocr", 0.0)))
+                total_val = float(lat.get("total", iter_ms))
+                lat_total.append(total_val)
+                lat.setdefault("iter", iter_ms)
+            else:
+                payload["latency_ms"] = {"iter": iter_ms}
+                lat_total.append(iter_ms)
+            lat_iter.append(iter_ms)
+            processed += 1
             print(json.dumps(payload, ensure_ascii=False))
             sys.stdout.flush()
         except Exception as exc:
             print(json.dumps({"input": path, "error": str(exc)}))
             sys.stdout.flush()
+            errors += 1
             if stop_on_error:
                 return 2
+    elapsed = time.perf_counter() - start_ts
+    if processed or errors:
+        fps = (processed / elapsed) if elapsed > 0 else 0.0
+        summary_lines = [
+            f"[e2e-json-stream] frames={processed} errors={errors} elapsed={elapsed:.2f}s fps={fps:.2f}",
+            f"  det_ms   {_format_stats(lat_det)}",
+            f"  ocr_ms   {_format_stats(lat_ocr)}",
+            f"  total_ms {_format_stats(lat_total)}",
+            f"  iter_ms  {_format_stats(lat_iter)}",
+        ]
+        print("\n".join(summary_lines), file=sys.stderr)
     return 0
 
 
@@ -242,9 +312,18 @@ def cmd_e2e(args: argparse.Namespace) -> int:
         annotate_dir.mkdir(parents=True, exist_ok=True)
 
     text_lines: List[str] = []
+    stats_enabled = bool(getattr(args, "stats", False) or getattr(args, "stats_file", ""))
+    lat_det: List[float] = []
+    lat_ocr: List[float] = []
+    lat_total: List[float] = []
+    lat_iter: List[float] = []
+    processed = 0
+    errors = 0
+    start_ts = time.perf_counter() if stats_enabled else 0.0
 
     for img_path in paths:
         try:
+            iter_start = time.perf_counter() if stats_enabled else 0.0
             result = run_e2e_single(
                 img_path,
                 det_engine=det_engine,
@@ -263,6 +342,8 @@ def cmd_e2e(args: argparse.Namespace) -> int:
             )
         except Exception as exc:
             print(f"failed e2e on {img_path}: {exc}", file=sys.stderr)
+            if stats_enabled:
+                errors += 1
             continue
 
         plates = result.get("plates", [])
@@ -312,6 +393,42 @@ def cmd_e2e(args: argparse.Namespace) -> int:
                 print(f"  annotated: {out_path}")
             except Exception as exc:
                 print(f"warn: annotation skipped for {img_path}: {exc}", file=sys.stderr)
+
+        if stats_enabled:
+            iter_ms = (time.perf_counter() - iter_start) * 1000.0
+            lat = result.get("latency_ms")
+            if isinstance(lat, dict):
+                lat_det.append(float(lat.get("det", 0.0)))
+                lat_ocr.append(float(lat.get("ocr", 0.0)))
+                total_val = float(lat.get("total", iter_ms))
+                lat_total.append(total_val)
+                lat.setdefault("iter", iter_ms)
+            else:
+                lat_total.append(iter_ms)
+            lat_iter.append(iter_ms)
+            processed += 1
+
+    stats_summary: List[str] = []
+    if stats_enabled:
+        elapsed = time.perf_counter() - start_ts if start_ts else 0.0
+        fps = (processed / elapsed) if (elapsed > 0 and processed) else 0.0
+        stats_summary = [
+            f"[e2e] images={processed} errors={errors} elapsed={elapsed:.2f}s fps={fps:.2f}",
+            f"  det_ms   {_format_stats(lat_det)}",
+            f"  ocr_ms   {_format_stats(lat_ocr)}",
+            f"  total_ms {_format_stats(lat_total)}",
+            f"  iter_ms  {_format_stats(lat_iter)}",
+        ]
+        if stats_summary:
+            print("\n".join(stats_summary), file=sys.stderr)
+        stats_path = getattr(args, "stats_file", "") or ""
+        if stats_path:
+            try:
+                p = Path(stats_path).expanduser()
+                p.parent.mkdir(parents=True, exist_ok=True)
+                p.write_text("\n".join(stats_summary) + "\n", encoding="utf-8")
+            except Exception as exc:
+                print(f"failed to write --stats-file: {exc}", file=sys.stderr)
 
     if getattr(args, "text_out", ""):
         try:

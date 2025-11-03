@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <cstddef>
 #include <string>
 
 #if __has_include(<opencv2/core.hpp>)
@@ -34,14 +35,24 @@ struct IpcConfig {
     bool log_send = false;
 };
 
+struct IpcStats {
+    uint64_t sent = 0;
+    uint64_t send_fail = 0;
+    uint64_t hwm_drop = 0;
+    uint64_t encode_fail = 0;
+};
+
 #if ALPR_DS_HEADER_HAS_OPENCV
 bool send_crop_over_ipc(const cv::Mat& bgr, const CropMetadata& meta);
 #else
 bool send_crop_over_ipc(const void* bgr, const CropMetadata& meta);
 #endif
 
+bool send_crop_jpeg_over_ipc(const unsigned char* data, std::size_t size, const CropMetadata& meta);
+
 IpcConfig current_config();
+IpcStats ipc_stats();
+bool ipc_enabled();
 
 }  // namespace ds
 }  // namespace alpr
-

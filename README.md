@@ -161,8 +161,12 @@ python -m alpr_jetson e2e \
   --onnx models/ocr/cct_s_v1_global.onnx \
   --plate-config models/ocr/cct_s_v1_global_plate_config.yaml \
   --source data/raw/cam01/frames \
-  --annotate-dir export/eval/e2e_vis
+  --annotate-dir export/eval/e2e_vis \
+  --stats \
+  --stats-file export/eval/e2e_stats.txt
 ```
+- `--stats` menampilkan ringkasan latensi/FPS (avg/p50/p95/max) ke stderr setelah semua gambar diproses. Berlaku baik untuk satu gambar maupun direktori.
+- `--stats-file <path>` (opsional) menyimpan ringkasan yang sama ke file.
 
 Output teks saja (opsional) untuk e2e:
 
@@ -222,6 +226,7 @@ TEXT_ONLY=1 OCR_BACKEND=onnx TEXT_ALLOW_INVALID=1 tools/alpr_e2e_json.sh /path/t
 # Simpan anotasi juga (selain JSON/teks)
 ANNOTATE_DIR=export/ann tools/alpr_e2e_json.sh /path/to/frame.jpg
 ```
+- Template PHP siap pakai: lihat `tools/php/alpr_cli_template.php` (panduan di `docs/INTEGRATION_PHP.md`).
 
 Contoh PHP (minimal) memanggil CLI dan membaca JSON:
 
@@ -258,6 +263,8 @@ python -m alpr_jetson e2e-json-stream \
   --conf 0.5 < paths.txt
 # paths.txt berisi satu path per baris; output: JSON line per gambar (dengan kolom "input")
 ```
+- Setiap baris JSON sekarang menyertakan `latency_ms.iter` (durasi iterasi penuh) selain det/OCR/total.
+- Ringkasan throughput dan statistik latensi (avg/p50/p95/max) dicetak ke stderr setelah stream selesai, sehingga stdout tetap NDJSON murni.
 
 Panduan lengkap (deduplikasi, retry, kualitas OCR) ada di `docs/INTEGRATION_PHP.md`.
 

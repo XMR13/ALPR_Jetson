@@ -100,7 +100,7 @@ IpcConfig load_config_from_env() {
     return cfg;
 }
 
-#if ALPR_DS_HAS_ZMQ && ALPR_DS_HAS_OPENCV
+#if ALPR_DS_HAS_ZMQ
 
 class IpcSender {
 public:
@@ -122,6 +122,7 @@ public:
         }
     }
 
+#if ALPR_DS_HAS_OPENCV
     bool send(const cv::Mat& bgr, const CropMetadata& meta) {
         if (!enabled_.load()) {
             return false;
@@ -135,27 +136,58 @@ public:
             stats_.encode_fail.fetch_add(1);
             return false;
         }
+        return send_buffer(buf.data(), buf.size(), meta, "jpeg", cfg_.jpeg_quality);
+    }
+#endif
 
-        std::ostringstream hdr;
-        hdr << "{\"version\":1";
-        hdr << ",\"camera_id\":\"" << sanitize_json(meta.camera_id) << "\"";
-        hdr << ",\"ts_ms\":" << meta.ts_ms;
-        hdr << ",\"frame_id\":" << meta.frame_id;
-        hdr << ",\"track_id\":" << meta.track_id;
-        hdr << ",\"bbox\": [" << meta.bbox[0] << "," << meta.bbox[1] << "," << meta.bbox[2] << "," << meta.bbox[3] << "]";
-        hdr << ",\"plate_h\": " << meta.plate_h;
-        hdr << ",\"img_w\": " << meta.img_w;
-        hdr << ",\"img_h\": " << meta.img_h;
-        hdr << ",\"encoding\":\"jpeg\"";
-        hdr << ",\"jpeg_quality\": " << cfg_.jpeg_quality;
-        hdr << ",\"priority\": " << meta.priority;
-        hdr << "}";
+    struct Stats {
+        std::atomic<uint64_t> sent{0};
+        std::atomic<uint64_t> send_fail{0};
+        std::atomic<uint64_t> hwm_drop{0};
+        std::atomic<uint64_t> encode_fail{0};
+    };
 
+    struct StatsSnapshot {
+        uint64_t sent = 0;
+        uint64_t send_fail = 0;
+        uint64_t hwm_drop = 0;
+        uint64_t encode_fail = 0;
+    };
+
+    bool send_jpeg(const unsigned char* data, std::size_t size, const CropMetadata& meta) {
+        return send_buffer(data, size, meta, "jpeg", cfg_.jpeg_quality);
+    }
+
+    StatsSnapshot snapshot() const {
+        StatsSnapshot snap;
+        snap.sent = stats_.sent.load();
+        snap.send_fail = stats_.send_fail.load();
+        snap.hwm_drop = stats_.hwm_drop.load();
+        snap.encode_fail = stats_.encode_fail.load();
+        return snap;
+    }
+
+    bool enabled() const { return enabled_.load(); }
+
+private:
+    bool send_buffer(const unsigned char* data, std::size_t size, const CropMetadata& meta, const std::string& encoding, int quality) {
+        if (!enabled_.load()) {
+            return false;
+        }
+        if (!socket_) {
+            return false;
+        }
+        if (data == nullptr || size == 0) {
+            stats_.send_fail.fetch_add(1);
+            return false;
+        }
         try {
-            zmq::message_t part_hdr(hdr.str());
-            zmq::message_t part_jpeg(buf.data(), buf.size());
+            std::string hdr = make_header(meta, encoding, quality);
+            zmq::message_t part_hdr(hdr.data(), hdr.size());
+            zmq::message_t part_payload(size);
+            std::memcpy(part_payload.data(), data, size);
             const bool ok = socket_->send(part_hdr, zmq::send_flags::sndmore) &&
-                            socket_->send(part_jpeg, zmq::send_flags::none);
+                            socket_->send(part_payload, zmq::send_flags::none);
             if (ok) {
                 stats_.sent.fetch_add(1);
                 if (cfg_.log_send) {
@@ -177,18 +209,26 @@ public:
         return false;
     }
 
-    struct Stats {
-        std::atomic<uint64_t> sent{0};
-        std::atomic<uint64_t> send_fail{0};
-        std::atomic<uint64_t> hwm_drop{0};
-        std::atomic<uint64_t> encode_fail{0};
-    };
+    std::string make_header(const CropMetadata& meta, const std::string& encoding, int quality) const {
+        std::ostringstream hdr;
+        hdr << "{\"version\":1";
+        hdr << ",\"camera_id\":\"" << sanitize_json(meta.camera_id) << "\"";
+        hdr << ",\"ts_ms\":" << meta.ts_ms;
+        hdr << ",\"frame_id\":" << meta.frame_id;
+        hdr << ",\"track_id\":" << meta.track_id;
+        hdr << ",\"bbox\": [" << meta.bbox[0] << "," << meta.bbox[1] << "," << meta.bbox[2] << "," << meta.bbox[3] << "]";
+        hdr << ",\"plate_h\": " << meta.plate_h;
+        hdr << ",\"img_w\": " << meta.img_w;
+        hdr << ",\"img_h\": " << meta.img_h;
+        hdr << ",\"encoding\":\"" << encoding << "\"";
+        if (encoding == "jpeg" && quality > 0) {
+            hdr << ",\"jpeg_quality\": " << quality;
+        }
+        hdr << ",\"priority\": " << meta.priority;
+        hdr << "}";
+        return hdr.str();
+    }
 
-    const Stats& stats() const { return stats_; }
-
-    bool enabled() const { return enabled_.load(); }
-
-private:
     IpcConfig cfg_{};
     std::unique_ptr<zmq::context_t> ctx_;
     std::unique_ptr<zmq::socket_t> socket_;
@@ -201,7 +241,7 @@ IpcSender& get_sender() {
     return sender;
 }
 
-#endif  // ALPR_DS_HAS_ZMQ && ALPR_DS_HAS_OPENCV
+#endif  // ALPR_DS_HAS_ZMQ
 
 }  // namespace
 
@@ -226,6 +266,40 @@ bool send_crop_over_ipc(
 
 IpcConfig current_config() {
     return load_config_from_env();
+}
+
+bool send_crop_jpeg_over_ipc(const unsigned char* data, std::size_t size, const CropMetadata& meta) {
+#if ALPR_DS_HAS_ZMQ
+    if (!get_sender().enabled()) {
+        return false;
+    }
+    return get_sender().send_jpeg(data, size, meta);
+#else
+    (void)data;
+    (void)size;
+    (void)meta;
+    return false;
+#endif
+}
+
+IpcStats ipc_stats() {
+    IpcStats out{};
+#if ALPR_DS_HAS_ZMQ
+    const auto snap = get_sender().snapshot();
+    out.sent = snap.sent;
+    out.send_fail = snap.send_fail;
+    out.hwm_drop = snap.hwm_drop;
+    out.encode_fail = snap.encode_fail;
+#endif
+    return out;
+}
+
+bool ipc_enabled() {
+#if ALPR_DS_HAS_ZMQ
+    return get_sender().enabled();
+#else
+    return false;
+#endif
 }
 
 }  // namespace ds

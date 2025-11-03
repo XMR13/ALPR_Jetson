@@ -82,6 +82,10 @@ zmq::message_t part1(jpeg.begin(), jpeg.end());
 bool ok = sock.send(part0, zmq::send_flags::sndmore) && sock.send(part1, zmq::send_flags::none);
 if (!ok) { /* increment drop metric */ }
 ```
+Helper utilities shipped in `src/deepstream_app/crop_probe.cpp`:
+- `send_crop_over_ipc(cv::Mat, CropMetadata)` — encodes to JPEG and publishes (requires OpenCV).
+- `send_crop_jpeg_over_ipc(unsigned char*, size_t, CropMetadata)` — publish pre-encoded JPEGs (works even when OpenCV headers are absent).
+- `ipc_enabled()` and `ipc_stats()` — quick health snapshot for pad probes and `/metrics`.
 
 Python OCR Receiver Sketch (pyzmq)
 ```python

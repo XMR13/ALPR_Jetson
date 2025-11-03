@@ -135,6 +135,14 @@ if ($rc === 0) {
 }
 ```
 
+### PHP Helper Template
+- File: `tools/php/alpr_cli_template.php`
+- Fungsi utama: `run_alpr($imagePath, $textOnly = false, $envOverrides = [])`
+  - Mengembalikan array dengan kunci `ok`, `exit_code`, `stdout`, `stderr`, dan `data` (jika sukses).
+  - Sudah men-setup `PYTHONPATH`, `DET_ENGINE`, `OCR_ONNX`, dan `PLATE_CONFIG` sesuai struktur repo; override via `$envOverrides` jika path berbeda.
+- Termasuk contoh handler upload (`$_FILES['image']`) yang merespon JSON langsung ke client.
+- Untuk uji lokal CLI: `php tools/php/alpr_cli_template.php` (tambah logika Anda sendiri) atau panggil fungsi dari aplikasi Anda.
+
 ## 7. Next Steps
 - Integrate redis/SQLite to store processed hashes if the PHP process restarts frequently.
 - Transition from filesystem handoff to HTTP/WebSocket once the upstream program can POST directly.
