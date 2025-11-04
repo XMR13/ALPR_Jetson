@@ -3,20 +3,20 @@
 This file is a fast, session-start snapshot. It does not replace plan.md.
 Source of truth for tasks and timeline remains plan.md (Section 5) and progress/* session logs.
 
-Last updated: 2025-10-31 (session 3)
+Last updated: 2025-11-04 (session 3)
 
 Current Week/Day
 - Week 2 — Day 12–13 (per plan.md §5)
 
 Open Items (mirrors plan.md §5)
-- Upgrade DS→OCR transport to ZeroMQ/IPC (Week 3 target) — OCR PULL + DS sender helper (JPEG + stats) shipped; wire into probe + metrics next.
-- Smoke-test rectification path end-to-end and capture metrics snapshots
-- Live RTSP/E2E soak with metrics populated from queue bridge
+- Build the real DeepStream pipeline on Jetson using the `make_crop_metadata()` + `maybe_send_crop_over_ipc()` path and publish probe counters via telemetry.
+- Execute NDJSON stream + `e2e --stats` smokes on Jetson following `docs/SMOKE_GUIDE.md`; archive outputs to progress logs.
+- Run the RTSP soak per `docs/SOAK_RUNBOOK.md` and capture metrics/drops for Week 3 acceptance.
 
 Next 3 Actions
-1) Wire `send_crop_over_ipc` into the DeepStream probe and gate via env/config; surface IPC counters.
-2) Run local/Jetson smoke for `tools/stream_cli_smoke.sh` (uses `e2e-json-stream`) and capture NDJSON + timing (iter stats now in payloads) plus `e2e --stats` summaries.
-3) Plan a short RTSP soak to validate queue and latency; capture metrics and drop stats.
+1) Implement DeepStream probe wiring on Jetson and expose `probe_counters()`/`ipc_stats()` (systemd log / metrics endpoint).
+2) Follow the NDJSON/`--stats` runbook to capture latency snapshots and store them under `export/smoke/`.
+3) Schedule and run the RTSP soak (1–2 h) with metrics logged per the soak checklist.
 
 Decisions/Risks
 - HTTP bridge remains default; IPC design drafted (see `docs/IPC_BRIDGE.md`).

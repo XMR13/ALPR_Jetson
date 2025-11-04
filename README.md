@@ -10,6 +10,11 @@ uji cepat:
 - **End-to-end JSON** (`e2e-json`): jalankan detektor + OCR untuk satu gambar dan cetak JSON ke stdout (untuk integrasi PHP sementara).
 - **Smoke tests**: `rtsp-smoke` (GStreamer) dan `ds-smoke` (DeepStream).
 
+Catatan workstation (non‑Jetson): jalankan hanya modul yang tidak membutuhkan
+TensorRT/DeepStream. Gunakan OCR ONNX dengan `--onnx-provider cpu` untuk smoke
+lokal. Periksa `docs/SMOKE_GUIDE.md`. Perintah `e2e`, `e2e-json`, dan DS smokes
+ditujukan untuk Jetson.
+
 Contoh cepat (gunakan `PYTHONPATH=src` bila belum `pip install -e .`):
 
 ```bash
@@ -228,6 +233,9 @@ ANNOTATE_DIR=export/ann tools/alpr_e2e_json.sh /path/to/frame.jpg
 ```
 - Template PHP siap pakai: lihat `tools/php/alpr_cli_template.php` (panduan di `docs/INTEGRATION_PHP.md`).
   - Helper menjaga proses `e2e-json-stream` tetap hidup antar panggilan (latency lebih rendah). Set `USE_STREAM=0` bila perlu kembali ke mode sekali jalan, misalnya saat mengaktifkan `ANNOTATE_DIR`.
+  - Quickstart khusus testing dari PHP (Postman → upload): lihat `docs/INTEGRATION_PHP_TESTING.md`.
+
+Panduan smoke test NDJSON & `--stats`: `docs/SMOKE_GUIDE.md`; runbook soak RTSP: `docs/SOAK_RUNBOOK.md`.
 
 Contoh PHP (minimal) memanggil CLI dan membaca JSON:
 

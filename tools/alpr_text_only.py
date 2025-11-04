@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-"""Minimal text-only ALPR runner with predetermined models.
+"""Text only ALPR.
 
 Usage:
   python tools/alpr_text_only.py /absolute/or/relative/path/to/image.jpg
 
 Behavior:
-  - Loads detector (TensorRT) and ONNX OCR once per call
+  - Memanggil TRT dan ONNX satu kali untuk per image
   - Runs full E2E (det + OCR) permissively (no pre-OCR crop gating)
   - Prints only the best plate text to stdout
-  - Exit codes: 0=text printed, 3=no plate/invalid text, 2=error
+  - Memprint Exit codes: 0=text printed, 3=no plate/invalid text, 2=error
 
-Environment overrides (optional):
+Nilai umum overrides (optional):
   DET_ENGINE   = models/detector/yolov9-s_plate_fp16.engine
   OCR_ONNX     = models/ocr/cct_s_v1_global.onnx
   PLATE_CONFIG = models/ocr/cct_s_v1_global_plate_config.yaml

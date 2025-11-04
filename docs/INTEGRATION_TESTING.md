@@ -112,6 +112,9 @@ if ($code === 200) {
 `status` will be `"ok"` if plates found, `"no_plate"` otherwise. Each plate entry also
 contains `det_conf`, `plate_conf`, `ocr_raw`, `char_confs`, and bounding box coordinates.
 
+For a PHP-only testing path (Postman → PHP upload) that doesn’t require running this HTTP service,
+see `INTEGRATION_PHP_TESTING.md` and use the streaming CLI helper from your PHP endpoint.
+
 ---
 
 ## 5. Troubleshooting

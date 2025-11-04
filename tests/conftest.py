@@ -23,3 +23,22 @@ def pytest_sessionstart(session):  # type: ignore[no-redef]
         if str(src) not in sys.path:
             sys.path.insert(0, str(src))
 
+
+def pytest_addoption(parser):  # type: ignore[no-redef]
+    parser.addoption(
+        "--run-jetson",
+        action="store_true",
+        default=False,
+        help="run tests marked as 'jetson' (DeepStream/TensorRT-dependent)",
+    )
+
+
+def pytest_collection_modifyitems(config, items):  # type: ignore[no-redef]
+    run_jetson = config.getoption("--run-jetson") or os.getenv("ALPR_RUN_JETSON") in ("1", "true", "True")
+    if run_jetson:
+        return
+    skip_jetson = pytest.mark.skip(reason="skipping Jetson-specific test; use --run-jetson to enable")
+    for item in items:
+        if item.get_closest_marker("jetson"):
+            item.add_marker(skip_jetson)
+import pytest

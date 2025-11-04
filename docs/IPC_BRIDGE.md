@@ -86,6 +86,30 @@ Helper utilities shipped in `src/deepstream_app/crop_probe.cpp`:
 - `send_crop_over_ipc(cv::Mat, CropMetadata)` — encodes to JPEG and publishes (requires OpenCV).
 - `send_crop_jpeg_over_ipc(unsigned char*, size_t, CropMetadata)` — publish pre-encoded JPEGs (works even when OpenCV headers are absent).
 - `ipc_enabled()` and `ipc_stats()` — quick health snapshot for pad probes and `/metrics`.
+- `make_crop_metadata(...)` + `maybe_send_crop_over_ipc(...)` — convenience helpers for pad probes (applies gating + counters before calling the sender).
+
+Pad probe hookup (Jetson build):
+```cpp
+// inside the NvBufSurface → cv::Mat conversion block
+int bbox[4] = {obj_meta->rect_params.left,
+               obj_meta->rect_params.top,
+               obj_meta->rect_params.left + obj_meta->rect_params.width,
+               obj_meta->rect_params.top + obj_meta->rect_params.height};
+alpr::ds::CropMetadata meta = alpr::ds::make_crop_metadata(
+    camera_id,                   // e.g., from source_id → cam map
+    frame_meta->ntp_timestamp / 1000000, // convert to ms if needed
+    frame_meta->frame_num,
+    obj_meta->object_id,
+    bbox,
+    static_cast<int>(obj_meta->rect_params.height),
+    frame_meta->source_frame_width,
+    frame_meta->source_frame_height,
+    0 /* priority */
+);
+if (!alpr::ds::maybe_send_crop_over_ipc(crop_bgr, meta)) {
+    // optional: log when IPC disabled or gating filtered the crop
+}
+```
 
 Python OCR Receiver Sketch (pyzmq)
 ```python
@@ -121,6 +145,21 @@ Operational Notes
 - Socket path: ensure cleanup on service start (remove stale `*.sock`).
 - Consider JPEG Q=85–90; evaluate trade-off between latency and OCR quality.
 - Add a small bounded in-process queue in OCR with worker threads → batch-friendly `infer_batch`.
+
+Runtime Checklist (Jetson NX)
+- **Jetson-only step:** Install ZeroMQ (`sudo apt install libzmq3-dev`) and ensure OpenCV dev headers are present (L4T base images ship with them). Skip on x86 dev boxes.
+- Export sender env toggles before starting the DeepStream binary:
+  ```bash
+  export ALPR_DS_IPC_ENABLED=1               # turn on PUSH socket (default 0)
+  export ALPR_DS_IPC_ENDPOINT=ipc:///tmp/alpr.ds2ocr.sock
+  export ALPR_DS_IPC_MIN_PLATE_H=28          # drop tiny crops (px)
+  export ALPR_DS_IPC_PRIORITY_ONLY=0         # 1 = send only when metadata priority > 0
+  export ALPR_DS_IPC_LOG=1                   # optional: log successful sends
+  export ALPR_DS_IPC_LOG_SKIPS=1             # optional: log gating skips
+  ```
+- Launch the OCR service with the matching PULL receiver (Jetson): `ALPR_OCR_IPC_ENABLED=1 uvicorn ocr_service.app:create_app --factory --host 0.0.0.0 --port 8081`.
+- Start DeepStream (`./alpr-deepstream --config configs/deepstream/app_config.txt`). The pad probe should call `maybe_send_crop_over_ipc()` so gating + counters are applied before publishing JPEG crops.
+- Collect metrics: expose `ipc_stats()` and `probe_counters()` via HTTP/Prometheus or log them periodically (e.g., every 5 s) to validate drop rates before running long soaks.
 
 Integration Plan
 1) Implement OCR-side PULL server in `src/ocr_service/app.py` (toggle via config).

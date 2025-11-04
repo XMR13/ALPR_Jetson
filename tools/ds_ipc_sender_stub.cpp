@@ -40,9 +40,9 @@ int main(int argc, char** argv) {
     meta.img_w = img.cols;
     meta.img_h = img.rows;
 
-    const bool ok = alpr::ds::send_crop_over_ipc(img, meta);
+    const bool ok = alpr::ds::maybe_send_crop_over_ipc(img, meta);
     if (!ok) {
-        std::cerr << "send_crop_over_ipc returned false" << std::endl;
+        std::cerr << "maybe_send_crop_over_ipc returned false" << std::endl;
         return 1;
     }
     std::cout << "sent crop to " << alpr::ds::current_config().endpoint << std::endl;

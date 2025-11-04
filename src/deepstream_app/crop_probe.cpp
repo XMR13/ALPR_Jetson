@@ -100,6 +100,47 @@ IpcConfig load_config_from_env() {
     return cfg;
 }
 
+struct ProbeConfig {
+    ProbeGating gating;
+};
+
+ProbeConfig load_probe_config() {
+    ProbeConfig cfg;
+    cfg.gating.min_plate_h = _env_to_int("ALPR_DS_IPC_MIN_PLATE_H", 28);
+    cfg.gating.priority_only = _env_enabled("ALPR_DS_IPC_PRIORITY_ONLY", false);
+    cfg.gating.log_skips = _env_enabled("ALPR_DS_IPC_LOG_SKIPS", false);
+    return cfg;
+}
+
+struct ProbeCounterState {
+    std::atomic<uint64_t> attempted{0};
+    std::atomic<uint64_t> skipped_disabled{0};
+    std::atomic<uint64_t> skipped_small_h{0};
+    std::atomic<uint64_t> skipped_priority{0};
+    std::atomic<uint64_t> ipc_sent{0};
+    std::atomic<uint64_t> ipc_send_fail{0};
+};
+
+ProbeConfig& probe_config_mut() {
+    static ProbeConfig cfg = load_probe_config();
+    return cfg;
+}
+
+ProbeCounterState& probe_counter_state() {
+    static ProbeCounterState ctr{};
+    return ctr;
+}
+
+void maybe_log_skip(const char* reason, const CropMetadata& meta) {
+    const auto& gate = probe_config_mut().gating;
+    if (!gate.log_skips) {
+        return;
+    }
+    std::cout << "[ds-ipc] skip (" << reason << ") track=" << meta.track_id
+              << " frame=" << meta.frame_id << " plate_h=" << meta.plate_h
+              << " priority=" << meta.priority << std::endl;
+}
+
 #if ALPR_DS_HAS_ZMQ
 
 class IpcSender {
@@ -268,6 +309,33 @@ IpcConfig current_config() {
     return load_config_from_env();
 }
 
+CropMetadata make_crop_metadata(const std::string& camera_id,
+                                int64_t ts_ms,
+                                int frame_id,
+                                int track_id,
+                                const int bbox[4],
+                                int plate_h,
+                                int img_w,
+                                int img_h,
+                                int priority) {
+    CropMetadata meta;
+    meta.camera_id = camera_id;
+    meta.ts_ms = ts_ms;
+    meta.frame_id = frame_id;
+    meta.track_id = track_id;
+    if (bbox) {
+        meta.bbox[0] = bbox[0];
+        meta.bbox[1] = bbox[1];
+        meta.bbox[2] = bbox[2];
+        meta.bbox[3] = bbox[3];
+    }
+    meta.plate_h = plate_h;
+    meta.img_w = img_w;
+    meta.img_h = img_h;
+    meta.priority = priority;
+    return meta;
+}
+
 bool send_crop_jpeg_over_ipc(const unsigned char* data, std::size_t size, const CropMetadata& meta) {
 #if ALPR_DS_HAS_ZMQ
     if (!get_sender().enabled()) {
@@ -298,6 +366,67 @@ bool ipc_enabled() {
 #if ALPR_DS_HAS_ZMQ
     return get_sender().enabled();
 #else
+    return false;
+#endif
+}
+
+ProbeGating probe_gating() {
+    return probe_config_mut().gating;
+}
+
+ProbeCounters probe_counters() {
+    ProbeCounters out{};
+    const auto& ctr = probe_counter_state();
+    out.attempted = ctr.attempted.load();
+    out.skipped_disabled = ctr.skipped_disabled.load();
+    out.skipped_small_h = ctr.skipped_small_h.load();
+    out.skipped_priority = ctr.skipped_priority.load();
+    out.ipc_sent = ctr.ipc_sent.load();
+    out.ipc_send_fail = ctr.ipc_send_fail.load();
+    return out;
+}
+
+void reload_probe_gating_from_env() {
+    probe_config_mut() = load_probe_config();
+}
+
+bool maybe_send_crop_over_ipc(
+#if ALPR_DS_HAS_OPENCV
+    const cv::Mat& bgr,
+#else
+    const void* bgr,
+#endif
+    const CropMetadata& meta) {
+    auto& ctr = probe_counter_state();
+    ctr.attempted.fetch_add(1);
+#if ALPR_DS_HAS_ZMQ && ALPR_DS_HAS_OPENCV
+    if (!ipc_enabled()) {
+        ctr.skipped_disabled.fetch_add(1);
+        maybe_log_skip("ipc_disabled", meta);
+        return false;
+    }
+    const auto gate = probe_config_mut().gating;
+    if (gate.priority_only && meta.priority <= 0) {
+        ctr.skipped_priority.fetch_add(1);
+        maybe_log_skip("priority_only", meta);
+        return false;
+    }
+    if (meta.plate_h > 0 && meta.plate_h < gate.min_plate_h) {
+        ctr.skipped_small_h.fetch_add(1);
+        maybe_log_skip("min_plate_h", meta);
+        return false;
+    }
+    const bool ok = send_crop_over_ipc(bgr, meta);
+    if (ok) {
+        ctr.ipc_sent.fetch_add(1);
+    } else {
+        ctr.ipc_send_fail.fetch_add(1);
+    }
+    return ok;
+#else
+    (void)bgr;
+    (void)meta;
+    ctr.skipped_disabled.fetch_add(1);
     return false;
 #endif
 }

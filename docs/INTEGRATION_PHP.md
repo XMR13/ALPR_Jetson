@@ -2,6 +2,8 @@
 
 This note covers how to connect a PHP application to the Jetson-based ALPR pipeline, including duplicate suppression, retry logic, and OCR validation. It mirrors the tasks in plan.md §5 (Week 2, Day 12–13).
 
+For quick testing from PHP (Postman → simple upload endpoint), see `INTEGRATION_PHP_TESTING.md`.
+
 ## 1. Preferred Architecture (HTTP)
 - Run the API service once (`uvicorn --factory src.api_server.server:create_app`).
 - PHP posts every frame to `POST /v1/alpr` using multipart form (`image` field + optional `camera_id`, `request_id`).

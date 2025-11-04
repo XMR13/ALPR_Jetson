@@ -42,6 +42,31 @@ struct IpcStats {
     uint64_t encode_fail = 0;
 };
 
+struct ProbeGating {
+    int min_plate_h = 28;
+    bool priority_only = false;
+    bool log_skips = false;
+};
+
+struct ProbeCounters {
+    uint64_t attempted = 0;
+    uint64_t skipped_disabled = 0;
+    uint64_t skipped_small_h = 0;
+    uint64_t skipped_priority = 0;
+    uint64_t ipc_sent = 0;
+    uint64_t ipc_send_fail = 0;
+};
+
+CropMetadata make_crop_metadata(const std::string& camera_id,
+                                int64_t ts_ms,
+                                int frame_id,
+                                int track_id,
+                                const int bbox[4],
+                                int plate_h,
+                                int img_w,
+                                int img_h,
+                                int priority);
+
 #if ALPR_DS_HEADER_HAS_OPENCV
 bool send_crop_over_ipc(const cv::Mat& bgr, const CropMetadata& meta);
 #else
@@ -53,6 +78,16 @@ bool send_crop_jpeg_over_ipc(const unsigned char* data, std::size_t size, const 
 IpcConfig current_config();
 IpcStats ipc_stats();
 bool ipc_enabled();
+
+ProbeGating probe_gating();
+ProbeCounters probe_counters();
+void reload_probe_gating_from_env();
+
+#if ALPR_DS_HEADER_HAS_OPENCV
+bool maybe_send_crop_over_ipc(const cv::Mat& bgr, const CropMetadata& meta);
+#else
+bool maybe_send_crop_over_ipc(const void* bgr, const CropMetadata& meta);
+#endif
 
 }  // namespace ds
 }  // namespace alpr
