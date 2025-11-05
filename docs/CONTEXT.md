@@ -3,13 +3,13 @@
 This file is a fast, session-start snapshot. It does not replace plan.md.
 Source of truth for tasks and timeline remains plan.md (Section 5) and progress/* session logs.
 
-Last updated: 2025-11-04 (session 3)
+Last updated: 2025-11-05 (resume sync; reflects progress/2025-11-04_session-5.md)
 
 Current Week/Day
 - Week 2 — Day 12–13 (per plan.md §5)
 
 Open Items (mirrors plan.md §5)
-- Build the real DeepStream pipeline on Jetson using the `make_crop_metadata()` + `maybe_send_crop_over_ipc()` path and publish probe counters via telemetry.
+- DeepStream pipeline wiring now lives in `alpr-deepstream` (pad probe → `maybe_send_crop_over_ipc()`); verify on Jetson and confirm probe counters/IPC metrics during next device session.
 - Execute NDJSON stream + `e2e --stats` smokes on Jetson following `docs/SMOKE_GUIDE.md`; archive outputs to progress logs.
 - Run the RTSP soak per `docs/SOAK_RUNBOOK.md` and capture metrics/drops for Week 3 acceptance.
 

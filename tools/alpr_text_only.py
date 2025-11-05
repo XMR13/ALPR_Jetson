@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-"""Text only ALPR.
+"""Minimal text-only ALPR runner with predetermined models.
 
 Usage:
   python tools/alpr_text_only.py /absolute/or/relative/path/to/image.jpg
 
 Behavior:
-  - Memanggil TRT dan ONNX satu kali untuk per image
+  - Loads detector (TensorRT) and ONNX OCR once per call
   - Runs full E2E (det + OCR) permissively (no pre-OCR crop gating)
   - Prints only the best plate text to stdout
-  - Memprint Exit codes: 0=text printed, 3=no plate/invalid text, 2=error
+  - Exit codes: 0=text printed, 3=no plate/invalid text, 2=error
 
-Nilai umum overrides (optional):
+Environment overrides (optional):
   DET_ENGINE   = models/detector/yolov9-s_plate_fp16.engine
   OCR_ONNX     = models/ocr/cct_s_v1_global.onnx
   PLATE_CONFIG = models/ocr/cct_s_v1_global_plate_config.yaml
@@ -39,7 +39,7 @@ def _load_allowed_prefix() -> List[str]:
     defaults = ["A", "B", "D", "F", "E", "Z", "T"]
     try:
         import yaml  # type: ignore
-        p = Path("configs/ocr/indonesia_prefixes.yaml")
+        p = Path("/home/iks-ai2/Development/ALPR_Jetson/configs/ocr/indonesia_prefixes.yaml")
         if p.exists():
             with open(p, "r", encoding="utf-8") as f:
                 data = yaml.safe_load(f) or {}
@@ -61,9 +61,9 @@ def main() -> int:
         return 2
 
     # Read env/config
-    det_engine_path = os.getenv("DET_ENGINE", "models/detector/yolov9-s_plate_fp16.engine")
-    ocr_onnx_path = os.getenv("OCR_ONNX", "models/ocr/cct_s_v1_global.onnx")
-    plate_cfg_path = os.getenv("PLATE_CONFIG", "models/ocr/cct_s_v1_global_plate_config.yaml")
+    det_engine_path = os.getenv("DET_ENGINE", "/home/iks-ai2/Development/ALPR_Jetson/models/detector/yolov9-s_plate_fp16.engine")
+    ocr_onnx_path = os.getenv("OCR_ONNX", "/home/iks-ai2/Development/ALPR_Jetson/models/ocr/cct_s_v1_global.onnx")
+    plate_cfg_path = os.getenv("PLATE_CONFIG", "/home/iks-ai2/Development/ALPR_Jetson/models/ocr/cct_s_v1_global_plate_config.yaml")
     conf = float(os.getenv("CONF", "0.5"))
     iou = float(os.getenv("IOU", "0.45"))
     topk = int(os.getenv("TOPK", "1"))

@@ -82,11 +82,25 @@ zmq::message_t part1(jpeg.begin(), jpeg.end());
 bool ok = sock.send(part0, zmq::send_flags::sndmore) && sock.send(part1, zmq::send_flags::none);
 if (!ok) { /* increment drop metric */ }
 ```
-Helper utilities shipped in `src/deepstream_app/crop_probe.cpp`:
+Helper utilities shipped in `src/deepstream_app/crop_probe.cpp` and wired via `src/deepstream_app/main.cpp`:
 - `send_crop_over_ipc(cv::Mat, CropMetadata)` — encodes to JPEG and publishes (requires OpenCV).
 - `send_crop_jpeg_over_ipc(unsigned char*, size_t, CropMetadata)` — publish pre-encoded JPEGs (works even when OpenCV headers are absent).
 - `ipc_enabled()` and `ipc_stats()` — quick health snapshot for pad probes and `/metrics`.
 - `make_crop_metadata(...)` + `maybe_send_crop_over_ipc(...)` — convenience helpers for pad probes (applies gating + counters before calling the sender).
+
+### Implementation Snapshot (2025-11-05)
+
+- `alpr-deepstream` now builds a DeepStream pipeline (RTSP → nvstreammux → nvinfer → nvtracker → nvvideoconvert → nvdsosd → sink) and installs a pad probe on the `nvdsosd` sink pad.
+- The probe converts each detected ROI to BGR via `NvBufSurfTransform` + OpenCV, populates `CropMetadata`, and calls `maybe_send_crop_over_ipc()` so gating + counters run before ZeroMQ publish.
+- CLI usage:
+  ```bash
+  ./alpr-deepstream --config configs/deepstream/app_config.txt \
+    --metadata-log /var/alpr/logs/ds_probe_metrics.log
+  ```
+  - `--config` accepts the DeepStream-style INI already in `configs/deepstream/`.
+  - `--metadata-log` (optional) writes one JSON line/second with `probe_counters()` + `ipc_stats()` snapshots for later ingestion.
+- Startup prints the active IPC config (`ALPR_DS_IPC_*` envs) and gating thresholds so we can confirm Jetson runtime toggles before smokes/soaks.
+- Build-time guards keep the binary a stub on workstations; full pipeline compiles on Jetson where DeepStream headers are present.
 
 Pad probe hookup (Jetson build):
 ```cpp
@@ -163,8 +177,8 @@ Runtime Checklist (Jetson NX)
 
 Integration Plan
 1) Implement OCR-side PULL server in `src/ocr_service/app.py` (toggle via config).
-2) Add C++ sender in `src/deepstream_app/crop_probe.cpp` guarded by a compile-time flag. ✅ Stub implemented (ZeroMQ PUSH, env toggles `ALPR_DS_IPC_*`).
-3) Expose metrics to `/metrics` and systemd journals.
+2) Add C++ sender in `src/deepstream_app/crop_probe.cpp` guarded by a compile-time flag. ✅ Sender + pad probe now live via `alpr-deepstream`.
+3) Expose metrics to `/metrics` and systemd journals (metadata log JSON is available via `--metadata-log`; HTTP/Prometheus wiring still open).
 4) E2E soak test: 1–2 hours; capture queue stats, latency, drop rates.
 
 ### Testing the C++ Stub (workstation or Jetson)

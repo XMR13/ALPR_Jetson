@@ -1,14 +1,16 @@
 import argparse, ctypes, glob, os, time
 import numpy as np
 import cv2
+
+np.bool = np.bool_
 import tensorrt as trt
 import pycuda.driver as cuda
 import pycuda.autoinit  # noqa: F401
 
-# ---- NumPy compatibility shim for TensorRT 8.5 on NumPy >= 1.24 ----
-if not hasattr(np, "bool"):
-    # TensorRT 8.5 uses np.bool in trt.nptype; define alias to keep it happy
-    np.bool = np.bool_
+# # ---- NumPy compatibility shim for TensorRT 8.5 on NumPy >= 1.24 ----
+# if not hasattr(np, "bool"):
+#     # TensorRT 8.5 uses np.bool in trt.nptype; define alias to keep it happy
+#     np.bool = np.bool_
 
 
 # ----------------- Utilities -----------------
