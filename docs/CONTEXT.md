@@ -3,20 +3,20 @@
 This file is a fast, session-start snapshot. It does not replace plan.md.
 Source of truth for tasks and timeline remains plan.md (Section 5) and progress/* session logs.
 
-Last updated: 2025-11-05 (resume sync; reflects progress/2025-11-04_session-5.md)
+Last updated: 2025-11-05 (Session 6 — see progress/2025-11-05_session-1.md once logged)
 
 Current Week/Day
 - Week 2 — Day 12–13 (per plan.md §5)
 
 Open Items (mirrors plan.md §5)
-- DeepStream pipeline wiring now lives in `alpr-deepstream` (pad probe → `maybe_send_crop_over_ipc()`); verify on Jetson and confirm probe counters/IPC metrics during next device session.
+- DeepStream pipeline wiring + fresh CMake linking lives in `alpr-deepstream`; build it inside the Jetson DeepStream container and confirm probe counters/IPC metrics during the next device session.
 - Execute NDJSON stream + `e2e --stats` smokes on Jetson following `docs/SMOKE_GUIDE.md`; archive outputs to progress logs.
 - Run the RTSP soak per `docs/SOAK_RUNBOOK.md` and capture metrics/drops for Week 3 acceptance.
 
 Next 3 Actions
-1) Implement DeepStream probe wiring on Jetson and expose `probe_counters()`/`ipc_stats()` (systemd log / metrics endpoint).
-2) Follow the NDJSON/`--stats` runbook to capture latency snapshots and store them under `export/smoke/`.
-3) Schedule and run the RTSP soak (1–2 h) with metrics logged per the soak checklist.
+1) Build `alpr-deepstream` using the updated CMake inside the DeepStream container, then run the RTSP probe with IPC logging enabled to validate counters + ZeroMQ wiring.
+2) Run NDJSON smokes (`e2e-json-stream` + `e2e --stats`) on Jetson, storing summaries under `export/smoke/` and noting results in `progress/`.
+3) Schedule and execute the 1–2 h RTSP soak per `docs/SOAK_RUNBOOK.md`, capturing metrics for Week 3 acceptance.
 
 Decisions/Risks
 - HTTP bridge remains default; IPC design drafted (see `docs/IPC_BRIDGE.md`).

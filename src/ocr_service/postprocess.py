@@ -13,6 +13,7 @@ from __future__ import annotations
 import re
 from collections import Counter, deque
 from dataclasses import dataclass
+from heapq import heappop, heappush
 from typing import Deque, Iterable, List, Optional, Sequence, Tuple
 
 
@@ -25,6 +26,69 @@ AMBIGUOUS_PAIRS: Sequence[Tuple[str, str]] = (
     ("G", "6"),
     ("Z", "2"),
 )
+
+# Heuristic correction weights (tuned for Indonesian scene)
+_MAX_EDIT_COST = 1.7
+_MAX_SEARCH_STATES = 256
+_SUB_COST_PREFIX = 0.45
+_SUB_COST_DIGIT = 0.35
+_SUB_COST_SUFFIX = 0.45
+_INSERT_COST = 0.65
+_DELETE_COST = 0.70
+
+_PREFIX_CONFUSIONS = {
+    "8": ("B",),
+    "B": ("8", "R"),
+    "R": ("B",),
+    "0": ("O", "D"),
+    "O": ("0", "D"),
+    "D": ("O", "0"),
+    "I": ("1", "L"),
+    "1": ("I", "L"),
+    "L": ("I", "1"),
+    "M": ("N",),
+    "N": ("M",),
+    "4": ("A",),
+    "A": ("4",),
+}
+
+_DIGIT_CONFUSIONS = {
+    "O": ("0",),
+    "0": ("O", "D"),
+    "D": ("0", "O"),
+    "I": ("1",),
+    "1": ("I",),
+    "S": ("5",),
+    "5": ("S",),
+    "B": ("8",),
+    "8": ("B", "0"),
+    "Z": ("2",),
+    "2": ("Z",),
+    "G": ("6",),
+    "6": ("G",),
+}
+
+_SUFFIX_CONFUSIONS = {
+    "Y": ("T", "V"),
+    "T": ("Y",),
+    "V": ("Y", "U"),
+    "U": ("V", "O"),
+    "O": ("D", "0"),
+    "D": ("O", "0", "C"),
+    "C": ("G", "O", "E"),
+    "E": ("C", "F"),
+    "N": ("M",),
+    "M": ("N",),
+    "R": ("B", "P"),
+    "B": ("R",),
+    "P": ("R", "F"),
+    "J": ("I",),
+    "I": ("1",),
+    "S": ("5",),
+    "5": ("S",),
+}
+
+_SUFFIX_INSERT_CHOICES: Tuple[str, ...] = tuple("NMPRCDEHABRSTYOUILG")
 
 
 def _clean(text: str) -> str:
@@ -74,29 +138,24 @@ def _apply_ambiguity(prefix: str, number: str, suffix: str) -> Tuple[str, str, s
     return p2, n2, s2
 
 
+_PENALTY_TRIGGER = 0.5
+
+
 def postprocess_indonesia(text: str, allowed_prefix: Optional[Iterable[str]] = None, regex: str = DEFAULT_REGEX) -> Tuple[str, bool]:
-    """Normalize OCR text to Indonesian plate format and report validity.
+    """Normalize OCR text to Indonesian plate format and report validity."""
+    allowed_set: Optional[set[str]] = {p.upper() for p in allowed_prefix} if allowed_prefix else None
+    regex_obj = re.compile(regex)
 
-    Returns (normalized_text, is_valid_by_regex_and_prefix)
-    """
-    t = _clean(text)
-    p, n, s = _split_segments(t)
-    p, n, s = _apply_ambiguity(p, n, s)
+    normalized, is_valid, _, suffix = _normalize_plate(text, allowed_set, regex_obj)
+    base_penalty = _suffix_penalty(suffix)
 
-    # Now enforce segment character sets and max lengths
-    p = re.sub(r"[^A-Z]", "", p)[:2]
-    n = re.sub(r"[^0-9]", "", n)[:4]
-    s = re.sub(r"[^A-Z]", "", s)[:3]
+    if is_valid and base_penalty < _PENALTY_TRIGGER:
+        return normalized, True
 
-    out = " ".join([x for x in (p, n, s) if x])
-
-    is_match = re.match(regex, out) is not None
-    if allowed_prefix is not None and p:
-        pref_ok = p in {x.upper() for x in allowed_prefix}
-        valid = is_match and pref_ok
-    else:
-        valid = is_match
-    return out, valid
+    refined = _search_best_plate(text, allowed_set, regex_obj, normalized if is_valid else "", base_penalty if is_valid else float("inf"))
+    if refined is not None:
+        return refined, True
+    return normalized, is_valid
 
 
 @dataclass
@@ -134,3 +193,159 @@ class MajorityVote:
         text_top = items[0][0]
         return text_top, avg_conf(text_top)
 
+
+def _normalize_plate(text: str, allowed_set: Optional[set[str]], regex_obj: re.Pattern[str]) -> Tuple[str, bool, str, str]:
+    cleaned = _clean(text)
+    if not cleaned:
+        return "", False, "", ""
+    p, n, s = _split_segments(cleaned)
+    p, n, s = _apply_ambiguity(p, n, s)
+
+    p = re.sub(r"[^A-Z]", "", p)[:2]
+    n = re.sub(r"[^0-9]", "", n)[:4]
+    s = re.sub(r"[^A-Z]", "", s)[:3]
+
+    out = " ".join([x for x in (p, n, s) if x])
+    if not out:
+        return "", False, "", ""
+
+    is_match = bool(regex_obj.match(out))
+    if allowed_set is not None and p:
+        valid = is_match and (p in allowed_set)
+    else:
+        valid = is_match
+    return out, valid, p, s
+
+
+def _normalize_clean_plate(clean_text: str, allowed_set: Optional[set[str]], regex_obj: re.Pattern[str]) -> Tuple[str, bool, str, str]:
+    """Variant of _normalize_plate that accepts already cleaned text."""
+    if not clean_text:
+        return "", False, "", 0
+    p, n, s = _split_segments(clean_text)
+    p, n, s = _apply_ambiguity(p, n, s)
+    p = re.sub(r"[^A-Z]", "", p)[:2]
+    n = re.sub(r"[^0-9]", "", n)[:4]
+    s = re.sub(r"[^A-Z]", "", s)[:3]
+    out = " ".join([x for x in (p, n, s) if x])
+    if not out:
+        return "", False, "", ""
+    is_match = bool(regex_obj.match(out))
+    if allowed_set is not None and p:
+        valid = is_match and (p in allowed_set)
+    else:
+        valid = is_match
+    return out, valid, p, s
+
+
+def _suffix_penalty(suffix: str) -> float:
+    if not suffix:
+        return 0.0
+    penalty = 0.0
+    if len(suffix) < 3:
+        penalty += 0.3
+    if len(suffix) == 2 and suffix[-1] in {"I", "U"}:
+        penalty += 0.55
+    if len(suffix) == 2 and suffix in {"DC", "DE", "DJ", "DT", "DK"}:
+        penalty += 0.8
+    if "TT" in suffix:
+        penalty += 0.6
+    if "DE" in suffix:
+        penalty += 0.6
+    return penalty
+
+
+def _search_best_plate(
+    text: str,
+    allowed_set: Optional[set[str]],
+    regex_obj: re.Pattern[str],
+    baseline_text: str,
+    baseline_score: float,
+) -> Optional[str]:
+    """Search nearby strings (small edits) for a valid Indonesian plate."""
+    start = _clean(text)
+    if not start:
+        return None
+
+    queue: List[Tuple[float, str]] = []
+    heappush(queue, (0.0, start))
+    seen = {start: 0.0}
+    best_score = baseline_score
+    best_text = baseline_text if baseline_score < float("inf") else None
+    states = 0
+
+    while queue and states < _MAX_SEARCH_STATES:
+        cost, raw = heappop(queue)
+        states += 1
+
+        normalized, valid, _, suffix = _normalize_clean_plate(raw, allowed_set, regex_obj)
+        if normalized:
+            penalty = _suffix_penalty(suffix)
+            score = cost + penalty
+            if valid and score + 1e-6 < best_score:
+                best_score = score
+                best_text = normalized
+
+        if cost >= _MAX_EDIT_COST:
+            continue
+
+        for candidate, op_cost in _expand_candidates(raw):
+            new_cost = cost + op_cost
+            if new_cost > _MAX_EDIT_COST:
+                continue
+            prev = seen.get(candidate)
+            if prev is not None and prev <= new_cost:
+                continue
+            seen[candidate] = new_cost
+            heappush(queue, (new_cost, candidate))
+
+    if best_text is not None and best_score + 1e-6 < baseline_score:
+        return best_text
+    if best_text is not None and baseline_score == float("inf"):
+        return best_text
+    return None
+
+
+def _segment_bounds(clean_text: str) -> Tuple[int, int]:
+    """Return (prefix_end, number_end) indices into clean_text."""
+    p, n, _ = _split_segments(clean_text)
+    pref_end = min(len(clean_text), len(p))
+    num_end = min(len(clean_text), pref_end + len(n))
+    return pref_end, num_end
+
+
+def _expand_candidates(clean_text: str) -> Iterable[Tuple[str, float]]:
+    """Generate nearby strings via small edits with heuristic costs."""
+    pref_end, num_end = _segment_bounds(clean_text)
+    length = len(clean_text)
+
+    # Substitutions
+    for idx, ch in enumerate(clean_text):
+        if idx < pref_end:
+            replacements = _PREFIX_CONFUSIONS.get(ch, ())
+            cost = _SUB_COST_PREFIX
+        elif idx < num_end:
+            replacements = _DIGIT_CONFUSIONS.get(ch, ())
+            cost = _SUB_COST_DIGIT
+        else:
+            replacements = _SUFFIX_CONFUSIONS.get(ch, ())
+            cost = _SUB_COST_SUFFIX
+        for repl in replacements:
+            if repl == ch:
+                continue
+            yield clean_text[:idx] + repl + clean_text[idx + 1 :], cost
+
+    # Insertions at logical boundaries (end of prefix, end of number, end of string)
+    insert_positions = {pref_end, num_end, length}
+    # allow insertions inside suffix region to recover missing interior letters
+    for pos in range(num_end, length + 1):
+        insert_positions.add(pos)
+    for pos in sorted(insert_positions):
+        if pos < 0 or pos > length:
+            continue
+        for char in _SUFFIX_INSERT_CHOICES:
+            yield clean_text[:pos] + char + clean_text[pos:], _INSERT_COST
+
+    # Deletions
+    if length > 0:
+        for idx in range(length):
+            yield clean_text[:idx] + clean_text[idx + 1 :], _DELETE_COST
