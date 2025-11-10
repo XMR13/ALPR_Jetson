@@ -1,6 +1,8 @@
 from ocr_service.postprocess import (
     DEFAULT_REGEX,
     MajorityVote,
+    PostprocessTuning,
+    load_postprocess_config,
     postprocess_indonesia,
 )
 
@@ -57,3 +59,35 @@ def test_majority_vote_prefers_frequent_then_conf():
     best = mv.best()
     assert best is not None
     assert best[0] == "B 9418 QW"
+
+
+def test_load_postprocess_config(tmp_path):
+    cfg_file = tmp_path / "postproc.yaml"
+    cfg_file.write_text(
+        """
+suffix_len_lt3_penalty: 0.5
+insert_bias_pdc: 0.1
+suffix_last_letter_penalty:
+  I: 0.2
+""",
+        encoding="utf-8",
+    )
+    cfg = load_postprocess_config(str(cfg_file))
+    assert cfg.suffix_len_lt3_penalty == 0.5
+    assert cfg.insert_bias_pdc == 0.1
+    assert cfg.suffix_last_letter_penalty["I"] == 0.2
+
+
+def test_postprocess_indonesia_respects_custom_tuning():
+    base = PostprocessTuning()
+    custom = PostprocessTuning(
+        suffix_penalty_map={**base.suffix_penalty_map, "DG": 0.0},
+        suffix_bonus_map={"DG": -0.5},
+        insert_bias_pdc=0.0,
+    )
+    # Without custom tuning, R9105DC → PDC
+    text_default, _ = postprocess_indonesia("R9105DC", allowed_prefix=["B"])
+    assert text_default == "B 9105 PDC"
+    # With the custom config, prefer DG to demonstrate configurability
+    text_custom, _ = postprocess_indonesia("R9105DC", allowed_prefix=["B"], tuning=custom)
+    assert text_custom != "B 9105 PDC"

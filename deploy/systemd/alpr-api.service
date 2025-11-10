@@ -1,14 +1,22 @@
 [Unit]
-Description=ALPR API Service (stub)
-After=network.target
+Description=ALPR API Server (Jetson warm service)
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 User=alpr
+WorkingDirectory=/opt/alpr
+EnvironmentFile=/etc/alpr/alpr-api.env
+ExecStart=/usr/bin/python3 -m uvicorn src.api_server.server:create_app --factory --host 0.0.0.0 --port 8080 --workers 1
 Restart=always
 RestartSec=2
-WorkingDirectory=/opt/alpr/src/api_server
-ExecStart=/usr/bin/python3 server.py
+
+# Optional hardening
+NoNewPrivileges=yes
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=yes
+LimitNOFILE=65535
 
 [Install]
 WantedBy=multi-user.target
-

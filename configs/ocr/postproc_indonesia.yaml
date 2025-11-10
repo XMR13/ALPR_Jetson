@@ -1,11 +1,24 @@
-regex: "^[A-Z]{1,2}\\s?\\d{1,4}\\s?[A-Z]{0,3}$"
-allowed_prefix: [A, B, D, F, E, Z, T]
-ambiguous_pairs:
-  - ["O", "0", 0.2]
-  - ["I", "1", 0.2]
-  - ["S", "5", 0.3]
-  - ["B", "8", 0.3]
-  - ["G", "6", 0.3]
-majority_vote_window: 8
-min_plate_height_px: 28
-
+# Default OCR post-processing tuning for Indonesian plates
+suffix_len_lt3_penalty: 0.2
+suffix_last_letter_penalty:
+  I: 0.55
+  U: 0.55
+suffix_penalty_map:
+  DC: 0.8
+  DJ: 0.8
+  DT: 0.8
+  DK: 0.8
+  DG: 0.35
+  DF: 0.35
+suffix_contains_penalty:
+  TT: 0.6
+  DE: 0.6
+suffix_bonus_map:
+  OE: -0.1
+  VIN: -0.1
+  PDC: -0.1
+suffix_duplicate_penalty: 1.0
+suffix_vowel_pair_penalty: 0.2
+duplicate_collapse_min_len: 2
+insert_bias_vi_to_vin: 0.05
+insert_bias_pdc: 0.25

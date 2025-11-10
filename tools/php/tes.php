@@ -7,20 +7,78 @@ if (!file_exists($upload_dir)) {
 
 $iml = isset($_POST['iml']) ? ($_POST['iml']) : "0";
 $nopol = isset($_POST['nopol']) ? ($_POST['nopol']) : "";
+$apiUrl = getenv('ALPR_API_URL') ?: '';
+$apiToken = getenv('ALPR_API_TOKEN') ?: '';
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_FILES['image'])) {
     $file_tmp  = $_FILES['image']['tmp_name'];
     $file_name = basename($_FILES['image']['name']);
     $target    = $upload_dir . $iml . "_" . date("YmdHis") . "_" . $_FILES['image']['name'];
 	
-	if ($_FILES["image"]["error"] > 0) {
+    	if ($_FILES["image"]["error"] > 0) {
+		header('Content-Type: application/json');
 		echo json_encode([
             'status' => 'error',
-            'message' => $_FILES["file"]["error"]
+            'message' => $_FILES["image"]["error"]
         ]);
-	} else {
+    	} else {
     	// Simpan file ke server
     	if (move_uploaded_file($file_tmp, $target)) {
+            // Option A: call warm ALPR API if configured
+            if ($apiUrl) {
+                $ch = curl_init();
+                $endpoint = rtrim($apiUrl, '/') . '/v1/alpr';
+                $cfile = new CURLFile($target, mime_content_type($target) ?: 'image/jpeg', basename($target));
+                $post = [ 'image' => $cfile, 'camera_id' => 'rfid-gate' ];
+                curl_setopt($ch, CURLOPT_URL, $endpoint);
+                curl_setopt($ch, CURLOPT_POST, true);
+                curl_setopt($ch, CURLOPT_POSTFIELDS, $post);
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($ch, CURLOPT_CONNECTTIMEOUT_MS, 500);
+                curl_setopt($ch, CURLOPT_TIMEOUT_MS, 1500);
+                $headers = [];
+                if ($apiToken) { $headers[] = 'Authorization: Bearer ' . $apiToken; }
+                if ($headers) { curl_setopt($ch, CURLOPT_HTTPHEADER, $headers); }
+                $apiResp = curl_exec($ch);
+                $apiErr  = curl_error($ch);
+                $status  = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                curl_close($ch);
+                if ($apiResp !== false && $status >= 200 && $status < 300) {
+                    // Adapt API JSON to legacy schema {success, plate, message}
+                    $data = json_decode($apiResp, true);
+                    $plateRaw = '';
+                    if (is_array($data) && isset($data['plate'])) {
+                        $plateRaw = (string)$data['plate'];
+                    }
+                    $NoPolisi = str_replace(' ', '', strtoupper($plateRaw));
+                    $valid = preg_match('/^[A-Z]{1,2}[0-9]{1,4}[A-Z]{0,3}$/', $NoPolisi) === 1;
+                    if (!$valid) {
+                        $response = [
+                            'success' => false,
+                            'plate'   => $NoPolisi,
+                            'message' => 'Wrong Plate Number'
+                        ];
+                    } else {
+                        if ($nopol !== '' && $nopol === $NoPolisi) {
+                            $response = [
+                                'success' => true,
+                                'plate'   => $NoPolisi,
+                                'message' => 'No Polisi sama'
+                            ];
+                        } else {
+                            $response = [
+                                'success' => true,
+                                'plate'   => $NoPolisi,
+                                'message' => 'OK'
+                            ];
+                        }
+                    }
+                    header('Content-Type: application/json');
+                    echo json_encode($response);
+                    return;
+                }
+                // fall back to local exec path if API fails
+            }
         	try{
 				$projectRoot = '/home/iks-ai2/Development/ALPR_Jetson';
 				$python = $projectRoot . '/venv/bin/python';
@@ -96,8 +154,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_FILES['image'])) {
 					];
 				}
 
-        		echo json_encode($response);
+			header('Content-Type: application/json');
+			echo json_encode($response);
         	}catch(Exception $e){
+        		header('Content-Type: application/json');
         		echo json_encode([
         			'success' => false,
 					'plate'   => '',
@@ -105,6 +165,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_FILES['image'])) {
     			]);
         	}
     	} else {
+        	header('Content-Type: application/json');
         	echo json_encode([
             	'success' => false,
 				'plate'   => '',
@@ -113,10 +174,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_FILES['image'])) {
     	}
 	}
 } else {
+    header('Content-Type: application/json');
     echo json_encode([
         'success' => false,
     	'plate'   => '',
         'message' => 'Gunakan POST dengan field image.'
     ]);
-}   
+}
 ?>
