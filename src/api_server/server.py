@@ -25,9 +25,9 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, Union
 
 try:  # Web framework
-    from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request, UploadFile, WebSocket
+    from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request, UploadFile, WebSocket, Body
     from fastapi.responses import JSONResponse, PlainTextResponse
-    from pydantic import BaseModel, Field, validator
+    from pydantic import BaseModel, Field
 except Exception:  # FastAPI not installed yet
     FastAPI = None  # type: ignore
     JSONResponse = None  # type: ignore
@@ -40,12 +40,6 @@ except Exception:  # FastAPI not installed yet
     Request = object  # type: ignore
     BackgroundTasks = object  # type: ignore
     BaseModel = object  # type: ignore
-
-    def validator(*args, **kwargs):  # type: ignore
-        def _wrap(fn):
-            return fn
-
-        return _wrap
 
 try:
     import numpy as np  # type: ignore
@@ -89,6 +83,43 @@ except Exception:  # pragma: no cover
 
 
 LOGGER = logging.getLogger(__name__)
+
+
+# -------------------------------
+# Pydantic request body models
+# Keep models at module scope to avoid Pydantic v2 forward-ref issues
+try:
+    class PreprocUpdateModel(BaseModel):  # type: ignore[misc]
+        clahe_brightness_gate: Optional[float] = None
+        suppress_highlights: Optional[bool] = None
+        highlight_threshold: Optional[int] = None
+        highlight_inpaint_radius: Optional[int] = None
+        remove_small_bright_specks: Optional[bool] = None
+        speck_area_px: Optional[int] = None
+        auto_preproc: Optional[bool] = None
+        auto_color_cast: Optional[bool] = None
+        gamma_correction: Optional[bool] = None
+        gamma_dark_gate: Optional[float] = None
+        gamma_value: Optional[float] = None
+        auto_polarity: Optional[bool] = None
+        polarity_dark_mean: Optional[float] = None
+        polarity_light_mean: Optional[float] = None
+        invert_grayscale: Optional[bool] = None
+
+    class CropInModel(BaseModel):  # type: ignore[misc]
+        request_id: str
+        crop_b64: str
+        camera_id: Optional[str] = None
+        frame_id: Optional[int] = None
+        track_id: Optional[int] = None
+        det_conf: float = 0.0
+        bbox: Tuple[int, int, int, int]
+        ts: Optional[str] = None
+        sequence_id: int = 0
+        polygon: Optional[List[float]] = None
+except Exception:
+    PreprocUpdateModel = object  # type: ignore
+    CropInModel = object  # type: ignore
 
 
 def _env_list(name: str, default: Optional[Sequence[str]] = None) -> List[str]:
@@ -716,20 +747,6 @@ def create_app(cfg: Optional[AppConfig] = None) -> "Optional[FastAPI]":
         ]
         return "\n".join(lines) + "\n"
 
-    if isinstance(BaseModel, type):
-
-        class PreprocUpdate(BaseModel):  # type: ignore[misc]
-            clahe_brightness_gate: Optional[float] = None
-            suppress_highlights: Optional[bool] = None
-            highlight_threshold: Optional[int] = None
-            highlight_inpaint_radius: Optional[int] = None
-            remove_small_bright_specks: Optional[bool] = None
-            speck_area_px: Optional[int] = None
-            auto_preproc: Optional[bool] = None
-            glare_frac_gate: Optional[float] = None
-            auto_highlight_quantile: Optional[float] = None
-            speck_area_frac_gate: Optional[float] = None
-
     @app.post("/v1/config/preproc")
     def update_preproc(payload: Dict[str, Any]):  # type: ignore[no-redef]
         # Update runtime config in-memory without restart
@@ -845,38 +862,8 @@ def create_app(cfg: Optional[AppConfig] = None) -> "Optional[FastAPI]":
         except Exception:  # pragma: no cover
             pass
 
-    if isinstance(BaseModel, type):
-
-        class CropIn(BaseModel):  # type: ignore
-            request_id: str = Field(..., description="Unique identifier per detection batch")
-            crop_b64: str = Field(..., description="Base64 encoded JPEG/PNG crop")
-            camera_id: str = Field(default_factory=lambda: state.config.default_camera_id)
-            frame_id: Optional[int] = None
-            track_id: Optional[int] = None
-            det_conf: float = Field(0.0, ge=0.0, le=1.0)
-            bbox: Tuple[int, int, int, int] = Field(..., description="[x1,y1,x2,y2] in source frame")
-            ts: Optional[str] = None
-            sequence_id: int = Field(0, ge=0)
-            polygon: Optional[List[float]] = Field(
-                None,
-                description="Optional quadrilateral as 8 floats [x0,y0,x1,y1,x2,y2,x3,y3] in source frame coords",
-            )
-
-            @validator("bbox")
-            def _bbox_len(cls, value: Tuple[int, int, int, int]):  # type: ignore
-                if len(value) != 4:
-                    raise ValueError("bbox must have four elements")
-                return value
-            @validator("polygon")
-            def _poly_len(cls, value: Optional[List[float]]):  # type: ignore
-                if value is None:
-                    return value
-                if len(value) != 8:
-                    raise ValueError("polygon must have 8 elements [x0,y0,..,x3,y3]")
-                return value
-
-        @app.post("/v1/crops")
-        async def enqueue_crop(payload: CropIn):  # type: ignore[no-redef]
+    @app.post("/v1/crops")
+    async def enqueue_crop(payload: CropInModel = Body(...)):  # type: ignore[no-redef]
             if state.runtime_error is not None:
                 raise HTTPException(status_code=503, detail=state.runtime_error.message)
             if state.crop_queue is None:
@@ -893,10 +880,11 @@ def create_app(cfg: Optional[AppConfig] = None) -> "Optional[FastAPI]":
             poly_xy: Optional[List[Tuple[float, float]]] = None
             if payload.polygon is not None:
                 coords = [float(v) for v in payload.polygon]
-                poly_xy = [(coords[i], coords[i + 1]) for i in range(0, 8, 2)]
+                if len(coords) == 8:
+                    poly_xy = [(coords[i], coords[i + 1]) for i in range(0, 8, 2)]
 
             task = CropTask(
-                camera_id=payload.camera_id,
+                camera_id=payload.camera_id or state.config.default_camera_id,
                 request_id=payload.request_id,
                 crop=crop,
                 det_conf=float(payload.det_conf or 0.0),
