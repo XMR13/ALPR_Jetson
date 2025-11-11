@@ -9,6 +9,7 @@ $iml = isset($_POST['iml']) ? ($_POST['iml']) : "0";
 $nopol = isset($_POST['nopol']) ? ($_POST['nopol']) : "";
 $apiUrl = getenv('ALPR_API_URL') ?: '';
 $apiToken = getenv('ALPR_API_TOKEN') ?: '';
+$minConf = getenv('ALPR_MIN_CONF') ?: '';
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_FILES['image'])) {
     $file_tmp  = $_FILES['image']['tmp_name'];
@@ -30,6 +31,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_FILES['image'])) {
                 $endpoint = rtrim($apiUrl, '/') . '/v1/alpr';
                 $cfile = new CURLFile($target, mime_content_type($target) ?: 'image/jpeg', basename($target));
                 $post = [ 'image' => $cfile, 'camera_id' => 'rfid-gate' ];
+                if ($minConf !== '') { $post['min_conf'] = $minConf; }
                 curl_setopt($ch, CURLOPT_URL, $endpoint);
                 curl_setopt($ch, CURLOPT_POST, true);
                 curl_setopt($ch, CURLOPT_POSTFIELDS, $post);
@@ -37,42 +39,51 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_FILES['image'])) {
                 curl_setopt($ch, CURLOPT_CONNECTTIMEOUT_MS, 500);
                 curl_setopt($ch, CURLOPT_TIMEOUT_MS, 1500);
                 $headers = [];
-                if ($apiToken) { $headers[] = 'Authorization: Bearer ' . $apiToken; }
+                // API expects X-ALPR-Token when auth is enabled
+                if ($apiToken) { $headers[] = 'X-ALPR-Token: ' . $apiToken; }
                 if ($headers) { curl_setopt($ch, CURLOPT_HTTPHEADER, $headers); }
                 $apiResp = curl_exec($ch);
                 $apiErr  = curl_error($ch);
                 $status  = curl_getinfo($ch, CURLINFO_HTTP_CODE);
                 curl_close($ch);
                 if ($apiResp !== false && $status >= 200 && $status < 300) {
-                    // Adapt API JSON to legacy schema {success, plate, message}
+                    // Adapt API JSON {status, plates:[{text, ocr_raw, valid, ...}], ...}
                     $data = json_decode($apiResp, true);
-                    $plateRaw = '';
-                    if (is_array($data) && isset($data['plate'])) {
-                        $plateRaw = (string)$data['plate'];
-                    }
-                    $NoPolisi = str_replace(' ', '', strtoupper($plateRaw));
-                    $valid = preg_match('/^[A-Z]{1,2}[0-9]{1,4}[A-Z]{0,3}$/', $NoPolisi) === 1;
-                    if (!$valid) {
-                        $response = [
-                            'success' => false,
-                            'plate'   => $NoPolisi,
-                            'message' => 'Wrong Plate Number'
-                        ];
-                    } else {
-                        if ($nopol !== '' && $nopol === $NoPolisi) {
-                            $response = [
-                                'success' => true,
-                                'plate'   => $NoPolisi,
-                                'message' => 'No Polisi sama'
-                            ];
+                    $NoPolisi = '';
+                    $msg = 'OK';
+                    if (is_array($data)) {
+                        $statusLabel = isset($data['status']) ? (string)$data['status'] : '';
+                        if ($statusLabel === 'ok' && isset($data['plates']) && is_array($data['plates']) && count($data['plates']) > 0) {
+                            $best = $data['plates'][0];
+                            $textBest = isset($best['text']) ? (string)$best['text'] : '';
+                            $textRaw = isset($best['ocr_raw']) ? (string)$best['ocr_raw'] : '';
+                            $validBest = !empty($best['valid']);
+                            $candidate = $textBest !== '' ? $textBest : $textRaw;
+                            $NoPolisi = str_replace(' ', '', strtoupper($candidate));
+                            $validRegex = preg_match('/^[A-Z]{1,2}[0-9]{1,4}[A-Z]{0,3}$/', $NoPolisi) === 1;
+                            if (!$validBest && !$validRegex) {
+                                $msg = 'Wrong Plate Number';
+                            }
                         } else {
-                            $response = [
-                                'success' => true,
-                                'plate'   => $NoPolisi,
-                                'message' => 'OK'
-                            ];
+                            $msg = 'No plate';
                         }
                     }
+                    $isOk = ($NoPolisi !== '') && (preg_match('/^[A-Z]{1,2}[0-9]{1,4}[A-Z]{0,3}$/', $NoPolisi) === 1);
+                    $success = $isOk;
+                    if ($isOk && $nopol !== '') {
+                        if ($nopol === $NoPolisi) {
+                            $msg = 'No Polisi sama';
+                            $success = true;
+                        } else {
+                            $msg = 'No Polisi tidak sama';
+                            $success = false; // preserve legacy behavior
+                        }
+                    }
+                    $response = [
+                        'success' => $success,
+                        'plate'   => $NoPolisi,
+                        'message' => $msg,
+                    ];
                     header('Content-Type: application/json');
                     echo json_encode($response);
                     return;
