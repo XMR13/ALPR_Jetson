@@ -11,10 +11,11 @@ ExecStart=/usr/bin/python3 -m uvicorn src.api_server.server:create_app --factory
 Restart=always
 RestartSec=2
 
-# Optional hardening
+# Optional hardening (tune carefully if running from /home)
 NoNewPrivileges=yes
 ProtectSystem=full
-ProtectHome=true
+# Running from /home; set to 'false' (or move repo to /opt and set 'true')
+ProtectHome=false
 PrivateTmp=yes
 LimitNOFILE=65535
 
