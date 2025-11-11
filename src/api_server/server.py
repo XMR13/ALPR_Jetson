@@ -212,6 +212,10 @@ class AppConfig:
     auth_token: str = ""
     default_camera_id: str = "cam01"
     min_conf: float = 0.5
+    # Plate acceptance gates
+    min_plate_h: int = 28
+    min_ar: float = 1.5
+    max_ar: float = 5.0
     allowed_prefixes: List[str] = field(default_factory=lambda: ["A", "B", "D", "F", "E", "Z", "T"])
     events_db: str = "export/events.sqlite"
     snapshots_dir: str = "export/snapshots"
@@ -261,6 +265,10 @@ def _config_from_env() -> AppConfig:
     cfg.auth_token = os.getenv("ALPR_API_TOKEN", cfg.auth_token)
     cfg.default_camera_id = os.getenv("ALPR_DEFAULT_CAMERA_ID", cfg.default_camera_id)
     cfg.min_conf = float(os.getenv("ALPR_MIN_CONF", cfg.min_conf))
+    # Acceptance thresholds (env-tunable)
+    cfg.min_plate_h = int(os.getenv("ALPR_PLATE_MIN_H", cfg.min_plate_h))
+    cfg.min_ar = float(os.getenv("ALPR_PLATE_AR_MIN", cfg.min_ar))
+    cfg.max_ar = float(os.getenv("ALPR_PLATE_AR_MAX", cfg.max_ar))
     cfg.allowed_prefixes = _env_list("ALPR_ALLOWED_PREFIXES", cfg.allowed_prefixes)
     cfg.events_db = os.getenv("ALPR_EVENTS_DB", cfg.events_db)
     cfg.snapshots_dir = os.getenv("ALPR_SNAPSHOTS_DIR", cfg.snapshots_dir)
@@ -911,6 +919,10 @@ def create_app(cfg: Optional[AppConfig] = None) -> "Optional[FastAPI]":
         camera_id: str = Form(""),
         request_id: str = Form(""),
         min_conf: float = Form(config.min_conf),
+        min_plate_h: int = Form(config.min_plate_h),
+        min_ar: float = Form(config.min_ar),
+        max_ar: float = Form(config.max_ar),
+        accept_all: bool = Form(False),
     ):  # type: ignore[no-redef]
         if state.runtime_error is not None:
             raise HTTPException(status_code=503, detail=state.runtime_error.message)
@@ -957,8 +969,8 @@ def create_app(cfg: Optional[AppConfig] = None) -> "Optional[FastAPI]":
         det_meta: List[Tuple[Tuple[int, int, int, int], float, int]] = []
         h, w = frame.shape[:2]
         # Heuristics from plan.md: ignore tiny or implausible aspect crops
-        MIN_H = 28
-        AR_MIN, AR_MAX = 1.5, 5.0
+        MIN_H = int(min_plate_h)
+        AR_MIN, AR_MAX = float(min_ar), float(max_ar)
         for bbox, score, cls in detections:
             x1, y1, x2, y2 = [int(round(v)) for v in bbox]
             x1 = max(0, min(x1, w - 1))
@@ -970,12 +982,13 @@ def create_app(cfg: Optional[AppConfig] = None) -> "Optional[FastAPI]":
             crop = frame[y1:y2, x1:x2]
             if crop.size == 0:
                 continue
-            # gate by height and aspect ratio to reduce garbage OCRs
-            hbox = max(1, y2 - y1)
-            wbox = max(1, x2 - x1)
-            ar = float(wbox) / float(hbox)
-            if (hbox < MIN_H) or (ar < AR_MIN) or (ar > AR_MAX):
-                continue
+            # gate by height and aspect ratio to reduce garbage OCRs (unless accept_all)
+            if not accept_all:
+                hbox = max(1, y2 - y1)
+                wbox = max(1, x2 - x1)
+                ar = float(wbox) / float(hbox)
+                if (hbox < MIN_H) or (ar < AR_MIN) or (ar > AR_MAX):
+                    continue
             crops.append(crop)
             det_meta.append(((x1, y1, x2, y2), float(score), int(cls)))
 
