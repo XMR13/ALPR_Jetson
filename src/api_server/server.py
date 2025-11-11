@@ -16,6 +16,7 @@ import asyncio
 import base64
 import json
 import logging
+import math
 import os
 import re
 import time
@@ -972,7 +973,11 @@ def create_app(cfg: Optional[AppConfig] = None) -> "Optional[FastAPI]":
         MIN_H = int(min_plate_h)
         AR_MIN, AR_MAX = float(min_ar), float(max_ar)
         for bbox, score, cls in detections:
-            x1, y1, x2, y2 = [int(round(v)) for v in bbox]
+            # Mirror CLI rounding: floor lower bounds, ceil upper bounds
+            x1 = int(math.floor(bbox[0]))
+            y1 = int(math.floor(bbox[1]))
+            x2 = int(math.ceil(bbox[2]))
+            y2 = int(math.ceil(bbox[3]))
             x1 = max(0, min(x1, w - 1))
             x2 = max(0, min(x2, w - 1))
             y1 = max(0, min(y1, h - 1))
