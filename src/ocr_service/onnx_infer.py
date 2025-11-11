@@ -63,6 +63,33 @@ def _ensure_color_mode(img: np.ndarray, mode: str) -> np.ndarray:
     raise ValueError("invalid input for rgb mode")
 
 
+_GAMMA_TABLE_CACHE: Dict[float, np.ndarray] = {}
+
+
+def _gamma_table(gamma: float) -> np.ndarray:
+    gamma = max(0.1, min(5.0, float(gamma)))
+    table = _GAMMA_TABLE_CACHE.get(gamma)
+    if table is None:
+        inv = 1.0 / gamma
+        arr = np.arange(256, dtype=np.float32) / 255.0
+        table = np.clip((arr ** inv) * 255.0, 0, 255).astype(np.uint8)
+        _GAMMA_TABLE_CACHE[gamma] = table
+    return table
+
+
+def _apply_gray_world_rgb(img: np.ndarray, clip: float = 0.35) -> np.ndarray:
+    if img.ndim != 3 or img.shape[2] != 3:
+        return img
+    img_f = img.astype(np.float32)
+    means = img_f.reshape(-1, 3).mean(axis=0) + 1e-3
+    mean_gray = float(means.mean())
+    scales = mean_gray / means
+    clip_val = max(0.0, min(1.0, clip))
+    scales = np.clip(scales, 1.0 - clip_val, 1.0 + clip_val)
+    balanced = img_f * scales
+    return np.clip(balanced, 0, 255).astype(np.uint8)
+
+
 #m
 def _resize_letterbox(
     img: np.ndarray,
@@ -172,6 +199,21 @@ class PlateConfig:
     clahe_brightness_gate: float = 0.0  # 0..255
     auto_deskew: bool = False
     deskew_threshold_deg: float = 12.0
+    # Night-time/headlight handling (disabled by default)
+    suppress_highlights: bool = False
+    highlight_threshold: int = 245  # 0..255; pixels >= this are considered glare
+    highlight_inpaint_radius: int = 0  # >0 to inpaint glare regions instead of clipping
+    remove_small_bright_specks: bool = False
+    speck_area_px: int = 8  # approximate smallest bright speck area to suppress
+    auto_color_cast: bool = True
+    color_cast_clip: float = 0.35
+    gamma_correction: bool = True
+    gamma_dark_gate: float = 90.0
+    gamma_value: float = 1.15
+    auto_polarity: bool = True
+    polarity_dark_mean: float = 110.0
+    polarity_light_mean: float = 175.0
+    invert_grayscale: bool = False
 
 
 class OnnxPlateOCR:
@@ -229,7 +271,13 @@ class OnnxPlateOCR:
 
     def _preprocess_one(self, img: np.ndarray) -> np.ndarray:
         mode = self.cfg.image_color_mode
-        img1 = _ensure_color_mode(img, mode)
+        img_color = img
+        if bool(self.cfg.auto_color_cast):
+            try:
+                img_color = _apply_gray_world_rgb(img_color, clip=self.cfg.color_cast_clip)
+            except Exception:
+                pass
+        img1 = _ensure_color_mode(img_color, mode)
 
         # Optional deskew + CLAHE (grayscale only)
         if mode.lower() == "grayscale":
@@ -266,6 +314,57 @@ class OnnxPlateOCR:
                         gray = clahe.apply(gray.astype(np.uint8))
                 except Exception:
                     pass
+
+            # Optional highlight suppression and speck removal for night-time glare
+            try:
+                th = int(self.cfg.highlight_threshold)
+                if th <= 0:
+                    th = int(np.quantile(gray, 0.998))
+                th = max(0, min(255, th))
+                if bool(self.cfg.remove_small_bright_specks):
+                    mask = (gray >= th).astype(np.uint8) * 255
+                    ksz = max(1, int(round((int(self.cfg.speck_area_px) ** 0.5))))
+                    ksz = min(max(ksz, 1), 5)
+                    k = np.ones((ksz, ksz), np.uint8)
+                    small = cv2.morphologyEx(mask, cv2.MORPH_OPEN, k)
+                    if small is not None and np.any(small):
+                        median_val = int(np.median(gray))
+                        gray = gray.copy()
+                        gray[small > 0] = median_val
+                if bool(self.cfg.suppress_highlights):
+                    mask2 = (gray >= th).astype(np.uint8) * 255
+                    if int(self.cfg.highlight_inpaint_radius or 0) > 0:
+                        r = int(self.cfg.highlight_inpaint_radius)
+                        gray = cv2.inpaint(gray, mask2, r, cv2.INPAINT_TELEA)
+                    else:
+                        gray = np.minimum(gray, th).astype(gray.dtype)
+            except Exception:
+                pass
+
+            if bool(self.cfg.gamma_correction):
+                try:
+                    gate = float(self.cfg.gamma_dark_gate)
+                    if gate <= 0.0:
+                        gate = 90.0
+                    if float(gray.mean()) < gate:
+                        table = _gamma_table(float(self.cfg.gamma_value))
+                        gray = cv2.LUT(gray, table)
+                except Exception:
+                    pass
+
+            try:
+                auto_invert = False
+                if bool(self.cfg.auto_polarity):
+                    mean_val = float(gray.mean())
+                    if mean_val <= float(self.cfg.polarity_dark_mean):
+                        auto_invert = True
+                    elif mean_val >= float(self.cfg.polarity_light_mean):
+                        auto_invert = False
+                if bool(self.cfg.invert_grayscale) or auto_invert:
+                    gray = 255 - gray
+            except Exception:
+                if bool(self.cfg.invert_grayscale):
+                    gray = 255 - gray
 
             img1 = gray
 

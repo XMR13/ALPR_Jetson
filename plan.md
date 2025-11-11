@@ -295,6 +295,15 @@ Reflective adjustment:
 - Make HTTP bridge the explicit milestone for Week 2; move ZeroMQ/IPC upgrade to Week 3 (Day 15–16) for performance hardening.
 - Include SQLite + snapshot persistence in Week 2 acceptance scope to support downstream integration testing.
 
+Status (as of 2025-11-10):
+- Documentation consolidated to single-source guides under `docs/` for integration flow, API, systemd, OCR model, and post‑processing.
+- Warm API bridge and OCR post‑processing refinements are ready and documented; no code changes pending on this front.
+
+Immediate next actions (device):
+- Deploy warm API on Jetson via systemd (Python 3.8.x; JetPack 5.1.5) following `docs/SYSTEMD_API.md`.
+- Build `alpr-deepstream` inside the DeepStream L4T container; verify probe counters and IPC wiring.
+- Run NDJSON smokes per `docs/SMOKE_GUIDE.md`; archive outputs under `export/smoke/` and record results in `progress/`.
+
 ### Week 3 — Quality Push I
 
 **Day 14–16**

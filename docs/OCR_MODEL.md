@@ -202,6 +202,64 @@ Validation checklist:
     --output export/ocr_val_preds.csv
   ```
 
+## 7. Adaptive Preprocessing & Runtime Control
+
+The Jetson runtime now adapts OCR preprocessing per crop so you don’t need to
+restart when lighting or plate colors change:
+
+- **Auto color cast** (gray-world) normalizes red/yellow LEDs and tinted IR
+  light before converting to grayscale.
+- **Glare/speck suppression** detects saturated hotspots per crop and either
+  inpaints them or clips only the affected pixels. Tiny bright specks (screws,
+  dirt) are removed automatically when detected.
+- **Gamma lift** brightens very dark plates before resizing.
+- **Dual-polarity** support: crops are inverted automatically when the plate is
+  dark background with light text (commercial/yellow, police, etc.).
+- All of the above are gated per crop; if the frame is clean daylight, nothing
+  extra runs.
+
+### Configuring on Jetson (TensorRT path)
+
+Environment toggles (optional, defaults are auto/on):
+
+```
+export ALPR_OCR_AUTO_PREPROC=1            # master switch for per-crop adaptation
+export ALPR_OCR_AUTO_COLOR=1             # gray-world color cast balancing
+export ALPR_OCR_GAMMA=1                  # gamma lift for dark crops
+export ALPR_OCR_AUTO_POLARITY=1          # auto invert for light-on-dark plates
+export ALPR_OCR_HL_THRESHOLD=245         # glare threshold (0 = auto quantile)
+export ALPR_OCR_SUPPRESS_HL=1            # always allow glare suppression
+export ALPR_OCR_REMOVE_SPECKS=1          # enable speck cleanup
+```
+
+You can fine-tune these live without restarting via the API:
+
+```
+curl -X POST http://localhost:8000/v1/config/preproc \
+  -H 'Content-Type: application/json' \
+  -d '{
+        "clahe_brightness_gate": 180,
+        "suppress_highlights": true,
+        "highlight_inpaint_radius": 2,
+        "remove_small_bright_specks": true,
+        "speck_area_px": 8,
+        "gamma_correction": true,
+        "gamma_dark_gate": 95,
+        "auto_polarity": true
+      }'
+```
+
+The handler updates the in-memory TensorRT preprocessor immediately. Use the
+same endpoint to roll changes back (e.g., set `auto_polarity` to `false`).
+
+For the ONNX fallback (workstation dev), extend your `plate_config` YAML with
+matching keys (e.g., `auto_color_cast: true`, `auto_polarity: true`).
+
+Metrics to watch:
+
+- `/metrics` now exposes `alpr_queue_*` and request counters; add your own log
+  statements when you toggle preprocessing to correlate with improved OCR.
+
 ## 7. Integrating with the Runtime
 
 - `models/ocr/charset.txt` — Create with 36 lines (0–9, A–Z). Our runtime

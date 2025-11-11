@@ -77,9 +77,15 @@ except Exception:  # pragma: no cover
     load_engine = None  # type: ignore
 
 try:
-    from ocr_service.postprocess import postprocess_indonesia  # type: ignore
+    from ocr_service.postprocess import (
+        postprocess_indonesia,  # type: ignore
+        load_postprocess_config,  # type: ignore
+        PostprocessTuning,  # type: ignore
+    )
 except Exception:  # pragma: no cover
     postprocess_indonesia = None  # type: ignore
+    load_postprocess_config = None  # type: ignore
+    PostprocessTuning = object  # type: ignore
 
 
 LOGGER = logging.getLogger(__name__)
@@ -183,6 +189,26 @@ class AppConfig:
     max_upload_bytes: int = 2_000_000
     vote_window: int = 8
     vote_min_consensus: int = 3
+    # Postprocess tuning
+    postproc_config: str = ""
+    postproc_strict: bool = False
+    # OCR preproc adaptive toggles
+    ocr_auto_preproc: bool = True
+    ocr_auto_color_cast: bool = True
+    ocr_gamma_correction: bool = True
+    ocr_gamma_dark_gate: float = 90.0
+    ocr_gamma_value: float = 1.15
+    ocr_auto_polarity: bool = True
+    ocr_polarity_dark_mean: float = 110.0
+    ocr_polarity_light_mean: float = 175.0
+    ocr_invert_grayscale: bool = False
+    # TRT OCR preprocess toggles (env-configurable)
+    ocr_clahe_brightness_gate: float = 0.0
+    ocr_suppress_highlights: bool = False
+    ocr_highlight_threshold: int = 245
+    ocr_highlight_inpaint_radius: int = 0
+    ocr_remove_small_bright_specks: bool = False
+    ocr_speck_area_px: int = 8
 
 
 def _config_from_env() -> AppConfig:
@@ -212,6 +238,24 @@ def _config_from_env() -> AppConfig:
     cfg.max_upload_bytes = int(os.getenv("ALPR_MAX_UPLOAD_BYTES", cfg.max_upload_bytes))
     cfg.vote_window = max(1, int(os.getenv("ALPR_VOTE_WINDOW", cfg.vote_window)))
     cfg.vote_min_consensus = max(1, int(os.getenv("ALPR_VOTE_MIN", cfg.vote_min_consensus)))
+    cfg.postproc_config = os.getenv("ALPR_POSTPROC_CONFIG", cfg.postproc_config)
+    cfg.postproc_strict = os.getenv("ALPR_POSTPROC_STRICT", "0").lower() in {"1", "true", "yes"}
+    # Preprocess env toggles (TRT OCR)
+    cfg.ocr_clahe_brightness_gate = float(os.getenv("ALPR_OCR_CLAHE_GATE", cfg.ocr_clahe_brightness_gate))
+    cfg.ocr_suppress_highlights = os.getenv("ALPR_OCR_SUPPRESS_HL", "0").lower() in {"1", "true", "yes"}
+    cfg.ocr_highlight_threshold = int(os.getenv("ALPR_OCR_HL_THRESHOLD", cfg.ocr_highlight_threshold))
+    cfg.ocr_highlight_inpaint_radius = int(os.getenv("ALPR_OCR_HL_INPAINT", cfg.ocr_highlight_inpaint_radius))
+    cfg.ocr_remove_small_bright_specks = os.getenv("ALPR_OCR_REMOVE_SPECKS", "0").lower() in {"1", "true", "yes"}
+    cfg.ocr_speck_area_px = int(os.getenv("ALPR_OCR_SPECK_AREA", cfg.ocr_speck_area_px))
+    cfg.ocr_auto_preproc = os.getenv("ALPR_OCR_AUTO_PREPROC", "1").lower() in {"1", "true", "yes"}
+    cfg.ocr_auto_color_cast = os.getenv("ALPR_OCR_AUTO_COLOR", "1").lower() in {"1", "true", "yes"}
+    cfg.ocr_gamma_correction = os.getenv("ALPR_OCR_GAMMA", "1").lower() in {"1", "true", "yes"}
+    cfg.ocr_gamma_dark_gate = float(os.getenv("ALPR_OCR_GAMMA_GATE", cfg.ocr_gamma_dark_gate))
+    cfg.ocr_gamma_value = float(os.getenv("ALPR_OCR_GAMMA_VALUE", cfg.ocr_gamma_value))
+    cfg.ocr_auto_polarity = os.getenv("ALPR_OCR_AUTO_POLARITY", "1").lower() in {"1", "true", "yes"}
+    cfg.ocr_polarity_dark_mean = float(os.getenv("ALPR_OCR_POLARITY_DARK", cfg.ocr_polarity_dark_mean))
+    cfg.ocr_polarity_light_mean = float(os.getenv("ALPR_OCR_POLARITY_LIGHT", cfg.ocr_polarity_light_mean))
+    cfg.ocr_invert_grayscale = os.getenv("ALPR_OCR_INVERT", "0").lower() in {"1", "true", "yes"}
     return cfg
 
 
@@ -268,6 +312,21 @@ def _initialize_runtime(cfg: AppConfig) -> Tuple[Optional[_Runtime], Optional[Ru
                 mean=0.5,
                 std=0.5,
                 use_clahe=not cfg.ocr_no_clahe,
+                clahe_brightness_gate=cfg.ocr_clahe_brightness_gate,
+                suppress_highlights=cfg.ocr_suppress_highlights,
+                highlight_threshold=cfg.ocr_highlight_threshold,
+                highlight_inpaint_radius=cfg.ocr_highlight_inpaint_radius,
+                remove_small_bright_specks=cfg.ocr_remove_small_bright_specks,
+                speck_area_px=cfg.ocr_speck_area_px,
+                auto_preproc=cfg.ocr_auto_preproc,
+                auto_color_cast=cfg.ocr_auto_color_cast,
+                gamma_correction=cfg.ocr_gamma_correction,
+                gamma_dark_gate=cfg.ocr_gamma_dark_gate,
+                gamma_value=cfg.ocr_gamma_value,
+                auto_polarity=cfg.ocr_auto_polarity,
+                polarity_dark_mean=cfg.ocr_polarity_dark_mean,
+                polarity_light_mean=cfg.ocr_polarity_light_mean,
+                invert_grayscale=cfg.ocr_invert_grayscale,
             )
             runtime.ocr_runner = OCRService(
                 engine_path=cfg.ocr_engine,
@@ -359,6 +418,7 @@ class _State:
     crop_worker: Optional[asyncio.Task[Any]] = None
     loop: Optional[asyncio.AbstractEventLoop] = None
     aggregator: TrackAggregator = field(default_factory=TrackAggregator)
+    postproc_tuning: Optional[PostprocessTuning] = None
 
 
 def create_app(cfg: Optional[AppConfig] = None) -> "Optional[FastAPI]":
@@ -391,6 +451,14 @@ def create_app(cfg: Optional[AppConfig] = None) -> "Optional[FastAPI]":
         snapshots_dir=snapshots_dir,
         aggregator=TrackAggregator(window=config.vote_window, min_consensus=config.vote_min_consensus),
     )
+
+    # Load optional OCR postprocess tuning YAML
+    if postprocess_indonesia is not None and load_postprocess_config is not None and config.postproc_config:
+        try:
+            state.postproc_tuning = load_postprocess_config(config.postproc_config)  # type: ignore[misc]
+            LOGGER.info("Loaded postprocess config: %s", config.postproc_config)
+        except Exception as exc:  # pragma: no cover
+            LOGGER.warning("Failed to load postprocess config %s: %s", config.postproc_config, exc)
 
     async def _persist_event_records(records: List[EventRecord]) -> None:
         if not records or state.event_store is None:
@@ -486,7 +554,13 @@ def create_app(cfg: Optional[AppConfig] = None) -> "Optional[FastAPI]":
         text, char_confs = await loop.run_in_executor(
             None, _infer_ocr_single, state.runtime, task.crop, task.polygon_xy
         )
-        norm_text, is_valid = postprocess_indonesia(text, allowed_prefix=state.config.allowed_prefixes or None)
+        norm_text, is_valid = postprocess_indonesia(
+            text,
+            allowed_prefix=state.config.allowed_prefixes or None,
+            tuning=state.postproc_tuning,  # type: ignore[arg-type]
+            char_confs=char_confs,
+            strict=bool(state.config.postproc_strict),
+        )
         plate_conf = _compute_plate_conf(task.det_conf, char_confs)
         detection_payload = {
             "bbox": list(task.bbox),
@@ -641,6 +715,86 @@ def create_app(cfg: Optional[AppConfig] = None) -> "Optional[FastAPI]":
             f"alpr_events_failures_total {state.events_failures}",
         ]
         return "\n".join(lines) + "\n"
+
+    if isinstance(BaseModel, type):
+
+        class PreprocUpdate(BaseModel):  # type: ignore[misc]
+            clahe_brightness_gate: Optional[float] = None
+            suppress_highlights: Optional[bool] = None
+            highlight_threshold: Optional[int] = None
+            highlight_inpaint_radius: Optional[int] = None
+            remove_small_bright_specks: Optional[bool] = None
+            speck_area_px: Optional[int] = None
+            auto_preproc: Optional[bool] = None
+            glare_frac_gate: Optional[float] = None
+            auto_highlight_quantile: Optional[float] = None
+            speck_area_frac_gate: Optional[float] = None
+
+    @app.post("/v1/config/preproc")
+    def update_preproc(payload: Dict[str, Any]):  # type: ignore[no-redef]
+        # Update runtime config in-memory without restart
+        c = state.config
+        data = payload or {}
+        def _bool(v: Any) -> Optional[bool]:
+            if isinstance(v, bool):
+                return v
+            if isinstance(v, str):
+                return v.lower() in {"1", "true", "yes"}
+            if v is None:
+                return None
+            return bool(v)
+
+        def _set(name: str, value: Any):
+            if hasattr(c, name) and value is not None:
+                setattr(c, name, value)
+
+        _set("ocr_clahe_brightness_gate", float(data.get("clahe_brightness_gate")) if data.get("clahe_brightness_gate") is not None else None)
+        _set("ocr_suppress_highlights", _bool(data.get("suppress_highlights")))
+        _set("ocr_highlight_threshold", int(data.get("highlight_threshold")) if data.get("highlight_threshold") is not None else None)
+        _set("ocr_highlight_inpaint_radius", int(data.get("highlight_inpaint_radius")) if data.get("highlight_inpaint_radius") is not None else None)
+        _set("ocr_remove_small_bright_specks", _bool(data.get("remove_small_bright_specks")))
+        _set("ocr_speck_area_px", int(data.get("speck_area_px")) if data.get("speck_area_px") is not None else None)
+        _set("ocr_auto_preproc", _bool(data.get("auto_preproc")))
+        _set("ocr_auto_color_cast", _bool(data.get("auto_color_cast")))
+        _set("ocr_gamma_correction", _bool(data.get("gamma_correction")))
+        _set("ocr_gamma_dark_gate", float(data.get("gamma_dark_gate")) if data.get("gamma_dark_gate") is not None else None)
+        _set("ocr_gamma_value", float(data.get("gamma_value")) if data.get("gamma_value") is not None else None)
+        _set("ocr_auto_polarity", _bool(data.get("auto_polarity")))
+        _set("ocr_polarity_dark_mean", float(data.get("polarity_dark_mean")) if data.get("polarity_dark_mean") is not None else None)
+        _set("ocr_polarity_light_mean", float(data.get("polarity_light_mean")) if data.get("polarity_light_mean") is not None else None)
+        _set("ocr_invert_grayscale", _bool(data.get("invert_grayscale")))
+
+        # Rebuild TRT preprocess config if present
+        if state.runtime and state.runtime.ocr_mode == "trt" and state.runtime.ocr_runner is not None:
+            try:
+                from ocr_service.preprocess import PreprocConfig  # type: ignore
+                pp = PreprocConfig(
+                    input_width=c.ocr_input_width,
+                    input_height=c.ocr_input_height,
+                    channels=c.ocr_channels,
+                    mean=0.5,
+                    std=0.5,
+                    use_clahe=not c.ocr_no_clahe,
+                    clahe_brightness_gate=c.ocr_clahe_brightness_gate,
+                    suppress_highlights=c.ocr_suppress_highlights,
+                    highlight_threshold=c.ocr_highlight_threshold,
+                    highlight_inpaint_radius=c.ocr_highlight_inpaint_radius,
+                    remove_small_bright_specks=c.ocr_remove_small_bright_specks,
+                    speck_area_px=c.ocr_speck_area_px,
+                    auto_preproc=c.ocr_auto_preproc,
+                    auto_color_cast=c.ocr_auto_color_cast,
+                    gamma_correction=c.ocr_gamma_correction,
+                    gamma_dark_gate=c.ocr_gamma_dark_gate,
+                    gamma_value=c.ocr_gamma_value,
+                    auto_polarity=c.ocr_auto_polarity,
+                    polarity_dark_mean=c.ocr_polarity_dark_mean,
+                    polarity_light_mean=c.ocr_polarity_light_mean,
+                    invert_grayscale=c.ocr_invert_grayscale,
+                )
+                state.runtime.ocr_runner.preproc = pp  # type: ignore[attr-defined]
+            except Exception as exc:  # pragma: no cover
+                raise HTTPException(status_code=500, detail=f"failed to update preprocess: {exc}")
+        return JSONResponse({"ok": True})
 
     @app.get("/v1/stream/info")
     def stream_info():  # type: ignore[no-redef]
@@ -861,7 +1015,13 @@ def create_app(cfg: Optional[AppConfig] = None) -> "Optional[FastAPI]":
         for idx, ((x1, y1, x2, y2), det_conf, cls) in enumerate(det_meta):
             raw_text = texts[idx] if idx < len(texts) else ""
             char_conf = char_confs[idx] if idx < len(char_confs) else []
-            norm_text, is_valid = postprocess_indonesia(raw_text, allowed_prefix=allowed)
+            norm_text, is_valid = postprocess_indonesia(
+                raw_text,
+                allowed_prefix=allowed,
+                tuning=state.postproc_tuning,  # type: ignore[arg-type]
+                char_confs=char_conf,
+                strict=bool(state.config.postproc_strict),
+            )
             plates.append(
                 {
                     "bbox": [int(x1), int(y1), int(x2), int(y2)],

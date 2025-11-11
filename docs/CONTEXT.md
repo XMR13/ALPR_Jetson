@@ -3,7 +3,7 @@
 This file is a fast, session-start snapshot. It does not replace plan.md.
 Source of truth for tasks and timeline remains plan.md (Section 5) and progress/* session logs.
 
-Last updated: 2025-11-05 (Session 6 — see progress/2025-11-05_session-1.md once logged)
+Last updated: 2025-11-11 (See progress/LATEST.md for the latest session)
 
 Current Week/Day
 - Week 2 — Day 12–13 (per plan.md §5)
@@ -14,9 +14,9 @@ Open Items (mirrors plan.md §5)
 - Run the RTSP soak per `docs/SOAK_RUNBOOK.md` and capture metrics/drops for Week 3 acceptance.
 
 Next 3 Actions
-1) Build `alpr-deepstream` using the updated CMake inside the DeepStream container, then run the RTSP probe with IPC logging enabled to validate counters + ZeroMQ wiring.
-2) Run NDJSON smokes (`e2e-json-stream` + `e2e --stats`) on Jetson, storing summaries under `export/smoke/` and noting results in `progress/`.
-3) Schedule and execute the 1–2 h RTSP soak per `docs/SOAK_RUNBOOK.md`, capturing metrics for Week 3 acceptance.
+1) Deploy warm API via systemd on Jetson (Python 3.8.x), using `requirements-jetson.txt` and `constraints-jetson.txt`.
+2) Build `alpr-deepstream` in the DeepStream L4T container; verify probe counters + IPC wiring.
+3) Run NDJSON smokes (`e2e-json-stream` + `e2e --stats`) and archive summaries under `export/smoke/`, logging results in `progress/`.
 
 Decisions/Risks
 - HTTP bridge remains default; IPC design drafted (see `docs/IPC_BRIDGE.md`).

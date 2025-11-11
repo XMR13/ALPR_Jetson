@@ -13,13 +13,16 @@ Notes (Jetson Xavier NX, JetPack 5.1.5):
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, Optional, Sequence, Tuple, Union
+from typing import Dict, Iterable, Optional, Sequence, Tuple, Union
 
 import cv2
 import numpy as np
 
 
 Number = Union[float, int]
+
+
+_GAMMA_TABLE_CACHE: Dict[float, np.ndarray] = {}
 
 
 @dataclass(frozen=True)
@@ -31,7 +34,30 @@ class PreprocConfig:
     clahe_clip: float = 2.0
     clahe_tile: int = 8
     use_clahe: bool = True
+    # Apply CLAHE only if mean brightness < gate (0 disables gating)
+    clahe_brightness_gate: float = 0.0  # 0..255
     channels: int = 1  # 1 (default) for LPRNet-style, 3 for PaddleOCR models
+    # Night-time/headlight handling (disabled by default)
+    suppress_highlights: bool = False
+    highlight_threshold: int = 245  # 0..255; pixels >= this are considered glare
+    highlight_inpaint_radius: int = 0  # >0 to inpaint glare regions instead of clipping
+    remove_small_bright_specks: bool = False
+    speck_area_px: int = 8  # approximate smallest bright speck area to suppress
+    # Automatic per-crop adaptation (day/night/dirty)
+    auto_preproc: bool = True
+    glare_frac_gate: float = 0.01         # fraction of pixels considered glare to trigger suppression
+    auto_highlight_quantile: float = 0.998  # quantile for auto threshold if highlight_threshold==0
+    speck_area_frac_gate: float = 0.002   # max fraction of area for specks cleanup
+    # Color & polarity helpers
+    auto_color_cast: bool = True
+    color_cast_clip: float = 0.35
+    gamma_correction: bool = True
+    gamma_dark_gate: float = 90.0
+    gamma_value: float = 1.15
+    auto_polarity: bool = True
+    polarity_dark_mean: float = 110.0
+    polarity_light_mean: float = 175.0
+    invert_grayscale: bool = False
 
 
 def to_gray(img_bgr: np.ndarray) -> np.ndarray:
@@ -73,6 +99,28 @@ def rectify_polygon(
     M = cv2.getPerspectiveTransform(src, dst)
     warped = cv2.warpPerspective(img_bgr, M, (W, H), flags=cv2.INTER_LINEAR)
     return warped
+
+
+def _gamma_table(gamma: float) -> np.ndarray:
+    gamma = max(0.1, min(5.0, float(gamma)))
+    table = _GAMMA_TABLE_CACHE.get(gamma)
+    if table is None:
+        inv = 1.0 / gamma
+        arr = np.arange(256, dtype=np.float32) / 255.0
+        table = np.clip((arr ** inv) * 255.0, 0, 255).astype(np.uint8)
+        _GAMMA_TABLE_CACHE[gamma] = table
+    return table
+
+
+def _apply_gray_world(img_bgr: np.ndarray, clip: float = 0.35) -> np.ndarray:
+    img = img_bgr.astype(np.float32)
+    means = img.reshape(-1, 3).mean(axis=0) + 1e-3
+    mean_gray = float(means.mean())
+    scales = mean_gray / means
+    clip_val = max(0.0, min(1.0, clip))
+    scales = np.clip(scales, 1.0 - clip_val, 1.0 + clip_val)
+    balanced = img * scales
+    return np.clip(balanced, 0, 255).astype(np.uint8)
 
 
 def _to_array(value: Union[Number, Sequence[Number]], channels: int) -> np.ndarray:
@@ -125,9 +173,103 @@ def prepare_ocr_input(
     """
     if polygon_xy is not None:
         img_bgr = rectify_polygon(img_bgr, polygon_xy, (cfg.input_height, cfg.input_width))
-    gray = to_gray(img_bgr)
+
+    bgr = img_bgr
+    if bool(cfg.auto_color_cast):
+        try:
+            bgr = _apply_gray_world(bgr, clip=cfg.color_cast_clip)
+        except Exception:
+            pass
+    gray = to_gray(bgr)
+
+    # Optional highlight suppression and speck cleanup for night-time glare/marks
+    try:
+        g = gray
+        # Choose threshold automatically if requested
+        th = int(cfg.highlight_threshold)
+        if th <= 0:
+            q = float(cfg.auto_highlight_quantile)
+            q = min(max(q, 0.95), 0.999)
+            th = int(np.quantile(g, q))
+        th = max(0, min(255, th))
+
+        # Measure glare fraction
+        bright_mask = (g >= th)
+        glare_frac = float(bright_mask.mean())
+        apply_highlights = bool(cfg.suppress_highlights)
+        apply_specks = bool(cfg.remove_small_bright_specks)
+        opened = None
+        # Auto triggers if enabled
+        if bool(cfg.auto_preproc):
+            if glare_frac >= float(cfg.glare_frac_gate):
+                apply_highlights = True
+            # Estimate small specks fraction via opening
+            ksz = max(1, int(round((int(cfg.speck_area_px) ** 0.5))))
+            ksz = min(max(ksz, 1), 5)
+            k = np.ones((ksz, ksz), np.uint8)
+            opened = cv2.morphologyEx((bright_mask.astype(np.uint8) * 255), cv2.MORPH_OPEN, k)
+            speck_frac = float((opened > 0).mean())
+            if 0 < speck_frac <= float(cfg.speck_area_frac_gate):
+                apply_specks = True
+
+        if apply_specks:
+            if opened is None:
+                ksz = max(1, int(round((int(cfg.speck_area_px) ** 0.5))))
+                ksz = min(max(ksz, 1), 5)
+                k = np.ones((ksz, ksz), np.uint8)
+                opened = cv2.morphologyEx((bright_mask.astype(np.uint8) * 255), cv2.MORPH_OPEN, k)
+            median_val = int(np.median(g))
+            g = g.copy()
+            g[opened > 0] = median_val
+        if apply_highlights:
+            mask2 = (g >= th).astype(np.uint8) * 255
+            if int(cfg.highlight_inpaint_radius or 0) > 0:
+                r = int(cfg.highlight_inpaint_radius)
+                g = cv2.inpaint(g, mask2, r, cv2.INPAINT_TELEA)
+            else:
+                g = np.minimum(g, th).astype(g.dtype)
+        gray = g
+    except Exception:
+        # keep preproc robust; ignore glare suppression errors
+        pass
+
     if cfg.use_clahe:
-        gray = clahe(gray, clip=cfg.clahe_clip, tile_grid=cfg.clahe_tile)
+        try:
+            mean = float(gray.mean())
+            gate = float(cfg.clahe_brightness_gate or 0.0)
+            if gate <= 0.0 and bool(cfg.auto_preproc):
+                gate = 170.0
+            if gate <= 0.0 or mean < gate:
+                gray = clahe(gray, clip=cfg.clahe_clip, tile_grid=cfg.clahe_tile)
+        except Exception:
+            gray = clahe(gray, clip=cfg.clahe_clip, tile_grid=cfg.clahe_tile)
+
+    if bool(cfg.gamma_correction):
+        try:
+            mean_val = float(gray.mean())
+            gate = float(cfg.gamma_dark_gate)
+            if gate <= 0.0:
+                gate = 90.0
+            if mean_val < gate:
+                table = _gamma_table(float(cfg.gamma_value))
+                gray = cv2.LUT(gray, table)
+        except Exception:
+            pass
+
+    try:
+        auto_invert = False
+        if bool(cfg.auto_polarity):
+            mean_val = float(gray.mean())
+            if mean_val <= float(cfg.polarity_dark_mean):
+                auto_invert = True
+            elif mean_val >= float(cfg.polarity_light_mean):
+                auto_invert = False
+        if bool(cfg.invert_grayscale) or auto_invert:
+            gray = 255 - gray
+    except Exception:
+        if bool(cfg.invert_grayscale):
+            gray = 255 - gray
+
     x = resize_normalize_gray(gray, cfg)
     return x
 

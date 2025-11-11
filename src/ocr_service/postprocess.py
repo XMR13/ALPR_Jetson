@@ -177,6 +177,14 @@ class PostprocessTuning:
     duplicate_collapse_min_len: int = 2
     insert_bias_vi_to_vin: float = 0.05
     insert_bias_pdc: float = 0.25
+    # New: confidence-aware truncation/gating (disabled by default)
+    # If > 0, require the last suffix character confidence to meet this threshold
+    # or drop it (plates allow 0–3 suffix letters). Useful for U↔O ambiguity at tail.
+    last_char_min_conf: float = 0.0
+    # If true, allow dropping low-confidence tail characters in suffix
+    truncate_ambiguous_suffix: bool = False
+    # Optional global minimum confidence for suffix characters; 0 disables
+    min_suffix_char_conf: float = 0.0
 
 
 DEFAULT_TUNING = PostprocessTuning()
@@ -202,6 +210,9 @@ def load_postprocess_config(path: str) -> PostprocessTuning:
         duplicate_collapse_min_len=int(data.get("duplicate_collapse_min_len", DEFAULT_TUNING.duplicate_collapse_min_len)),
         insert_bias_vi_to_vin=float(data.get("insert_bias_vi_to_vin", DEFAULT_TUNING.insert_bias_vi_to_vin)),
         insert_bias_pdc=float(data.get("insert_bias_pdc", DEFAULT_TUNING.insert_bias_pdc)),
+        last_char_min_conf=float(data.get("last_char_min_conf", DEFAULT_TUNING.last_char_min_conf)),
+        truncate_ambiguous_suffix=bool(data.get("truncate_ambiguous_suffix", DEFAULT_TUNING.truncate_ambiguous_suffix)),
+        min_suffix_char_conf=float(data.get("min_suffix_char_conf", DEFAULT_TUNING.min_suffix_char_conf)),
     )
 
 
@@ -210,13 +221,25 @@ def postprocess_indonesia(
     allowed_prefix: Optional[Iterable[str]] = None,
     regex: str = DEFAULT_REGEX,
     tuning: Optional[PostprocessTuning] = None,
+    # Optional: per-character confidences aligned to raw text with no spaces
+    # (only applicable for slot-based OCR decoders). If provided and tuning
+    # enables truncation, we may drop low-confidence tail letters in the suffix.
+    char_confs: Optional[List[float]] = None,
+    strict: bool = False,
 ) -> Tuple[str, bool]:
     """Normalize OCR text to Indonesian plate format and report validity."""
     cfg = tuning or DEFAULT_TUNING
     allowed_set: Optional[set[str]] = {p.upper() for p in allowed_prefix} if allowed_prefix else None
     regex_obj = re.compile(regex)
 
-    normalized, is_valid, _, suffix = _normalize_plate(text, allowed_set, regex_obj, cfg)
+    # Optionally drop low-confidence trailing suffix characters before normalization
+    raw_for_norm = text
+    if (strict or cfg.truncate_ambiguous_suffix or cfg.last_char_min_conf > 0.0 or cfg.min_suffix_char_conf > 0.0) and char_confs:
+        pruned = _truncate_lowconf_suffix(text, char_confs, cfg)
+        if pruned:
+            raw_for_norm = pruned
+
+    normalized, is_valid, _, suffix = _normalize_plate(raw_for_norm, allowed_set, regex_obj, cfg)
     base_penalty = _suffix_penalty(suffix, cfg)
 
     if is_valid and base_penalty < _PENALTY_TRIGGER:
@@ -233,6 +256,69 @@ def postprocess_indonesia(
     if refined is not None:
         return refined, True
     return normalized, is_valid
+
+
+def _truncate_lowconf_suffix(text: str, char_confs: List[float], cfg: PostprocessTuning) -> Optional[str]:
+    """Drop trailing low-confidence suffix characters safely.
+
+    Assumptions:
+    - text has no spaces (common for OCR decoders); we operate on alnum-only.
+    - char_confs aligns one-to-one with characters in `text`.
+    Strategy:
+    - Split into segments; identify suffix region indices.
+    - While last suffix char exists and its confidence < thresholds, drop it.
+    - Never drop prefix or number characters.
+    Returns a new raw string or None if unchanged/invalid mapping.
+    """
+    if not text:
+        return None
+    clean = _clean(text)
+    flat = re.sub(r"\s+", "", clean)
+    if len(flat) != len(char_confs):
+        return None
+    # Determine segment boundaries based on cleaned string
+    p, n, s = _split_segments(clean)
+    if not (p or n or s):
+        return None
+    p_len = len(p)
+    n_len = len(n)
+    # Sanity guard: ensure prefix are letters and numbers are digits lengths within bounds
+    if p_len < 1 or n_len < 1:
+        return None
+    suffix_start = p_len + n_len
+    if suffix_start > len(flat):
+        return None
+    # Nothing to do if no suffix
+    if suffix_start == len(flat):
+        return None
+
+    # Iterate from the end, drop while below threshold and allowed
+    confs = list(char_confs)
+    chars = list(flat)
+    changed = False
+    while len(chars) > suffix_start:
+        last_idx = len(chars) - 1
+        last_conf = float(confs[last_idx])
+        # thresholds
+        min_tail = max(0.0, float(cfg.last_char_min_conf))
+        min_each = max(0.0, float(cfg.min_suffix_char_conf))
+        threshold = max(min_tail, min_each)
+        if threshold <= 0.0:
+            break
+        if last_conf >= threshold:
+            break
+        # Drop last char
+        chars.pop()
+        confs.pop()
+        changed = True
+        # Optionally only drop one character; for now allow dropping multiple until satisfied
+        if not bool(cfg.truncate_ambiguous_suffix) and min_tail > 0.0:
+            # If only last-char rule is on but truncate flag is false, drop at most one
+            break
+
+    if not changed:
+        return None
+    return "".join(chars)
 
 
 @dataclass

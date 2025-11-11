@@ -13,7 +13,11 @@ and how to measure their impact before deploying changes.
   - `suffix_duplicate_penalty`: cost applied when a 2-letter suffix repeats the same letter (e.g., `SS`).
   - `suffix_vowel_pair_penalty`: discourages triples with adjacent vowels (glare artefacts).
   - `insert_bias_vi_to_vin`, `insert_bias_pdc`: lower the edit cost for targeted insertions such as `VI→VIN` and `DC→PDC`.
-  - `duplicate_collapse_min_len`: how many repeated letters must appear before collapsing (`SS→S`).
+- `duplicate_collapse_min_len`: how many repeated letters must appear before collapsing (`SS→S`).
+  - Confidence-aware options (optional; disabled by default):
+    - `last_char_min_conf`: if > 0, require the last suffix character confidence to exceed this threshold, otherwise drop it (helps U↔O-at-last).
+    - `min_suffix_char_conf`: global minimum confidence per suffix character (0 disables).
+    - `truncate_ambiguous_suffix`: if true, drop multiple trailing low-confidence suffix chars until thresholds are met.
 
 To override values, copy the YAML and edit the scalars. For example:
 
@@ -55,6 +59,31 @@ PYTHONPATH=src python3 tools/eval_postprocess.py \
   raw OCR, post-processed text, and whether the heuristics altered the result.
 - Before adopting new weights in production, attach the eval JSON and a short
   summary to `progress/<date>_session-*.md` to keep plan.md §5 in sync.
+
+### Enabling strict mode at runtime
+
+- You can point the API to a custom YAML and enable strict truncation of ambiguous suffix characters without code changes:
+
+```
+export ALPR_POSTPROC_CONFIG=configs/ocr/postproc_indonesia.yaml
+export ALPR_POSTPROC_STRICT=1
+```
+
+The server loads the YAML on startup and applies confidence-aware truncation when ONNX OCR provides per-character confidences.
+
+### Night-time glare and speck suppression (ONNX OCR)
+
+- The ONNX OCR preprocessor supports optional highlight/speck suppression in the plate config (YAML referenced by `ALPR_PLATE_CONFIG`):
+
+```
+suppress_highlights: true
+highlight_threshold: 245
+highlight_inpaint_radius: 2   # optional; 0 uses clipping instead of inpainting
+remove_small_bright_specks: true
+speck_area_px: 8
+```
+
+Use grayscale mode for best effect and combine with CLAHE + deskew as needed.
 
 ## Next Steps
 

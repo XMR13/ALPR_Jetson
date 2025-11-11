@@ -29,6 +29,16 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools]
 package-dir = {"" = "src"}
 
-[tool.uv.scripts]
+# (recommended) make sure packages under src/ are found
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# ⬇️ replace [tool.uv.scripts] with Poe tasks
+[tool.poe.tasks]
 guard = "bash tools/py38_guard.sh src"
 test = "pytest -q"
+
+[dependency-groups]
+dev = [
+    "poethepoet>=0.30.0",
+]

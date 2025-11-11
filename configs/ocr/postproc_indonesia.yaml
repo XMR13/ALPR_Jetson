@@ -1,8 +1,6 @@
-# Default OCR post-processing tuning for Indonesian plates
 suffix_len_lt3_penalty: 0.2
 suffix_last_letter_penalty:
   I: 0.55
-  U: 0.55
 suffix_penalty_map:
   DC: 0.8
   DJ: 0.8
@@ -10,6 +8,7 @@ suffix_penalty_map:
   DK: 0.8
   DG: 0.35
   DF: 0.35
+  ZO: 0.6   # discourage O at tail when Z precedes (prefer ZU)
 suffix_contains_penalty:
   TT: 0.6
   DE: 0.6
@@ -17,8 +16,14 @@ suffix_bonus_map:
   OE: -0.1
   VIN: -0.1
   PDC: -0.1
+  ZU: -0.2  # encourage ZU over ZO in suffix
 suffix_duplicate_penalty: 1.0
 suffix_vowel_pair_penalty: 0.2
-duplicate_collapse_min_len: 2
+duplicate_collapse_min_len: 3
 insert_bias_vi_to_vin: 0.05
 insert_bias_pdc: 0.25
+
+# Confidence-aware options (safe defaults; enable via ALPR_POSTPROC_STRICT=1)
+last_char_min_conf: 0.65
+truncate_ambiguous_suffix: true
+min_suffix_char_conf: 0.0
