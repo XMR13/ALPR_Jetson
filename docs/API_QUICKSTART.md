@@ -7,24 +7,24 @@ This is a single, step-by-step guide to run the ALPR API, tune it for night/glar
 - Python: 3.8.x on Jetson; local dev can use uv but keep code 3.8-safe
 - Models on disk:
   - Detector (TensorRT): `models/detector/*.engine`
-  - OCR: choose one
-    - TensorRT CTC: `models/ocr/<ocr>.engine` + `models/ocr/charset.txt`
-    - ONNX slot-based: `models/ocr/<ocr>.onnx` + plate YAML (e.g., `models/ocr/cct_s_v1_global_plate_config.yaml`)
+  - OCR (default ONNX slot-based): `models/ocr/<ocr>.onnx` + plate YAML (e.g., `models/ocr/cct_s_v1_global_plate_config.yaml`)
+    - TensorRT CTC remains available if you build an engine + `models/ocr/charset.txt`
 
 References: server factory at `src/api_server/server.py`, API contract in `docs/API.md`.
 
 ## 2) Local (uv) — Start the API
 1. Sync deps (optional if using uv):
    - `uv sync`
-2. Export environment (pick TRT OCR or ONNX OCR):
-   - Detector (required):
-     - `export ALPR_DET_ENGINE=models/detector/yolov9-s_plate_fp16.engine`
-   - TRT OCR (Jetson-like):
-     - `export ALPR_OCR_ENGINE=models/ocr/ppo_crnn_fp16.engine`
-     - `export ALPR_OCR_CHARSET=models/ocr/charset.txt`
-   - ONNX OCR (workstation-friendly):
+2. Export environment (ONNX OCR is the default):
+  - Detector (required):
+    - `export ALPR_DET_ENGINE=models/detector/yolov9-s_plate_fp16.engine`
+  - ONNX OCR (recommended):
      - `export ALPR_OCR_ONNX=models/ocr/cct_s_v1_global.onnx`
      - `export ALPR_PLATE_CONFIG=models/ocr/cct_s_v1_global_plate_config.yaml`
+     - Optional: `export ALPR_ONNX_PROVIDER=cuda` (or `cpu` on workstations)
+  - TensorRT OCR (only if you have the `.engine` + charset):
+     - `export ALPR_OCR_ENGINE=models/ocr/ppo_crnn_fp16.engine`
+     - `export ALPR_OCR_CHARSET=models/ocr/charset.txt`
    - Optional tuning:
      - `export ALPR_POSTPROC_CONFIG=configs/ocr/postproc_indonesia.yaml`
      - `export ALPR_ALLOWED_PREFIXES=A,B,D,F,E,Z,T`
@@ -43,7 +43,7 @@ Notes:
 1. Install runtime:
    - `python3 -m venv .venv && source .venv/bin/activate`
    - `pip install -e . -c constraints-jetson.txt -r requirements-jetson.txt`
-2. Export environment (same variables as local, with absolute paths recommended).
+2. Export environment (same variables as local; ONNX pair is default, use absolute paths).
 3. Run manually:
    - `python3 -m uvicorn src.api_server.server:create_app --factory --host 0.0.0.0 --port 8080 --workers 1`
 4. Or install systemd service (recommended):
@@ -133,9 +133,9 @@ curl -X POST "http://<host>:8080/v1/alpr" \
 
 ## 10) Environment Variables (common)
 - Detector: `ALPR_DET_ENGINE`
-- OCR (choose one):
-  - TRT: `ALPR_OCR_ENGINE`, `ALPR_OCR_CHARSET`, optional `ALPR_OCR_INPUT_WIDTH/HEIGHT/CHANNELS`
-  - ONNX: `ALPR_OCR_ONNX`, `ALPR_PLATE_CONFIG`, `ALPR_ONNX_PROVIDER=cuda|cpu`, `ALPR_ONNX_GPU_MEM_MB`
+- OCR (default ONNX):
+  - `ALPR_OCR_ONNX`, `ALPR_PLATE_CONFIG`, `ALPR_ONNX_PROVIDER=cuda|cpu`, `ALPR_ONNX_GPU_MEM_MB`
+  - TensorRT fallback: `ALPR_OCR_ENGINE`, `ALPR_OCR_CHARSET`, optional `ALPR_OCR_INPUT_WIDTH/HEIGHT/CHANNELS`
 - Postprocess: `ALPR_POSTPROC_CONFIG`, `ALPR_POSTPROC_STRICT`
 - Access/limits: `ALPR_API_TOKEN`, `ALPR_MAX_UPLOAD_BYTES` (default 2_000_000), `ALPR_MIN_CONF`
 - Persistence: `ALPR_SNAPSHOTS_DIR`, `ALPR_EVENTS_DB`
@@ -145,4 +145,3 @@ curl -X POST "http://<host>:8080/v1/alpr" \
 ---
 
 That’s it. Use this Quickstart for operators and integration devs; deeper details live in `docs/API.md`, `docs/RUNNING.md`, `docs/OCR_MODEL.md`, and `docs/OCR_POSTPROCESS.md`.
-

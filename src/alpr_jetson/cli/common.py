@@ -7,13 +7,37 @@ from __future__ import annotations
 """
 
 import argparse
+import os
+from pathlib import Path
 from typing import Tuple
+
+DEFAULT_ONNX_MODEL = Path("models/ocr/cct_s_v1_global.onnx")
+DEFAULT_PLATE_CONFIG = Path("models/ocr/cct_s_v1_global_plate_config.yaml")
+DEFAULT_TRT_ENGINE = Path("models/ocr/ppo_crnn_fp16.engine")
+DEFAULT_CHARSET = Path("models/ocr/charset.txt")
+
+
+def _existing_path(value: str) -> str:
+    if not value:
+        return ""
+    path = Path(value)
+    if path.is_file():
+        return str(path)
+    return ""
+
+
+def _default_onnx_pair() -> Tuple[str, str]:
+    model = _existing_path(str(DEFAULT_ONNX_MODEL))
+    plate = _existing_path(str(DEFAULT_PLATE_CONFIG))
+    if model and plate:
+        return model, plate
+    return "", ""
 
 
 def add_ocr_backend_args(p: argparse.ArgumentParser) -> None:
-    group = p.add_mutually_exclusive_group(required=True)
+    group = p.add_mutually_exclusive_group(required=False)
     group.add_argument("--engine", help="Path to OCR TensorRT .engine (CTC)")
-    group.add_argument("--onnx", help="Path to OCR ONNX model (slot-based)")
+    group.add_argument("--onnx", help="Path to OCR ONNX model (slot-based). Defaults to models/ocr/cct_s_v1_global.onnx if present")
     p.add_argument("--charset", help="Path to charset.txt (TensorRT only)")
     p.add_argument("--plate-config", help="YAML config for ONNX slot model")
     p.add_argument("--onnx-provider", choices=["cuda", "cpu"], default="cuda", help="ONNXRuntime provider")
@@ -40,8 +64,17 @@ def init_ocr_backend(args: argparse.Namespace) -> Tuple[str, object]:
     except Exception as exc:  # pragma: no cover
         raise RuntimeError(f"OCR dependencies missing: {exc}") from exc
 
-    if getattr(args, "onnx", None):
-        cfg_path = getattr(args, "plate_config", "")
+    onnx_model = getattr(args, "onnx", "") or os.getenv("ALPR_OCR_ONNX", "")
+    plate_cfg_arg = getattr(args, "plate_config", "") or os.getenv("ALPR_PLATE_CONFIG", "")
+    if not onnx_model:
+        default_model, default_cfg = _default_onnx_pair()
+        if default_model and default_cfg:
+            onnx_model = default_model
+            if not plate_cfg_arg:
+                plate_cfg_arg = default_cfg
+
+    if onnx_model:
+        cfg_path = plate_cfg_arg
         if not cfg_path:
             raise ValueError("--plate-config is required when using --onnx")
         try:
@@ -72,7 +105,7 @@ def init_ocr_backend(args: argparse.Namespace) -> Tuple[str, object]:
             deskew_threshold_deg=float(cfg.get("deskew_threshold_deg", 12.0)),
         )
         runner = OnnxPlateOCR(
-            args.onnx,
+            onnx_model,
             plate_cfg,
             prefer_trt=False,
             provider=getattr(args, "onnx_provider", "cuda"),
@@ -81,8 +114,12 @@ def init_ocr_backend(args: argparse.Namespace) -> Tuple[str, object]:
         return "onnx", runner
 
     # TensorRT path
-    engine_path = getattr(args, "engine", "")
-    charset = getattr(args, "charset", "")
+    engine_path = getattr(args, "engine", "") or os.getenv("ALPR_OCR_ENGINE", "")
+    charset = getattr(args, "charset", "") or os.getenv("ALPR_OCR_CHARSET", "")
+    if not engine_path:
+        engine_path = _existing_path(str(DEFAULT_TRT_ENGINE))
+    if not charset:
+        charset = _existing_path(str(DEFAULT_CHARSET))
     if not engine_path:
         raise ValueError("--engine is required when --onnx is not provided")
     if not charset:
@@ -104,4 +141,3 @@ def init_ocr_backend(args: argparse.Namespace) -> Tuple[str, object]:
         blank_index=getattr(args, "blank_index", 0),
     )
     return "trt", svc
-

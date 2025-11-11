@@ -206,8 +206,8 @@ class AppConfig:
     ocr_logits_layout: str = "NTC"
     ocr_input_layout: str = "NCHW"
     ocr_blank_index: int = 0
-    ocr_onnx: str = ""
-    plate_config: str = ""
+    ocr_onnx: str = "models/ocr/cct_s_v1_global.onnx"
+    plate_config: str = "models/ocr/cct_s_v1_global_plate_config.yaml"
     onnx_provider: str = "cuda"
     onnx_gpu_mem_limit_mb: int = 512
     auth_token: str = ""
@@ -340,46 +340,7 @@ def _initialize_runtime(cfg: AppConfig) -> Tuple[Optional[_Runtime], Optional[Ru
     except Exception as exc:  # pragma: no cover
         return None, RuntimeErrorState(f"failed to load detector engine: {exc}")
 
-    if cfg.ocr_engine and cfg.charset_path:
-        try:
-            from ocr_service.preprocess import PreprocConfig  # type: ignore
-            from ocr_service.trt_infer import OCRService  # type: ignore
-
-            preproc = PreprocConfig(
-                input_width=cfg.ocr_input_width,
-                input_height=cfg.ocr_input_height,
-                channels=cfg.ocr_channels,
-                mean=0.5,
-                std=0.5,
-                use_clahe=not cfg.ocr_no_clahe,
-                clahe_brightness_gate=cfg.ocr_clahe_brightness_gate,
-                suppress_highlights=cfg.ocr_suppress_highlights,
-                highlight_threshold=cfg.ocr_highlight_threshold,
-                highlight_inpaint_radius=cfg.ocr_highlight_inpaint_radius,
-                remove_small_bright_specks=cfg.ocr_remove_small_bright_specks,
-                speck_area_px=cfg.ocr_speck_area_px,
-                auto_preproc=cfg.ocr_auto_preproc,
-                auto_color_cast=cfg.ocr_auto_color_cast,
-                gamma_correction=cfg.ocr_gamma_correction,
-                gamma_dark_gate=cfg.ocr_gamma_dark_gate,
-                gamma_value=cfg.ocr_gamma_value,
-                auto_polarity=cfg.ocr_auto_polarity,
-                polarity_dark_mean=cfg.ocr_polarity_dark_mean,
-                polarity_light_mean=cfg.ocr_polarity_light_mean,
-                invert_grayscale=cfg.ocr_invert_grayscale,
-            )
-            runtime.ocr_runner = OCRService(
-                engine_path=cfg.ocr_engine,
-                charset_path=cfg.charset_path,
-                preproc=preproc,
-                logits_layout=cfg.ocr_logits_layout,
-                input_layout=cfg.ocr_input_layout,
-                blank_index=cfg.ocr_blank_index,
-            )
-            runtime.ocr_mode = "trt"
-        except Exception as exc:  # pragma: no cover
-            return None, RuntimeErrorState(f"failed to load OCR TensorRT engine: {exc}")
-    elif cfg.ocr_onnx and cfg.plate_config:
+    if cfg.ocr_onnx and cfg.plate_config:
         if yaml is None:
             return None, RuntimeErrorState("pyyaml is required for ONNX OCR plate config")
         try:
@@ -424,6 +385,45 @@ def _initialize_runtime(cfg: AppConfig) -> Tuple[Optional[_Runtime], Optional[Ru
             runtime.ocr_mode = "onnx"
         except Exception as exc:  # pragma: no cover
             return None, RuntimeErrorState(f"failed to initialize ONNX OCR: {exc}")
+    elif cfg.ocr_engine and cfg.charset_path:
+        try:
+            from ocr_service.preprocess import PreprocConfig  # type: ignore
+            from ocr_service.trt_infer import OCRService  # type: ignore
+
+            preproc = PreprocConfig(
+                input_width=cfg.ocr_input_width,
+                input_height=cfg.ocr_input_height,
+                channels=cfg.ocr_channels,
+                mean=0.5,
+                std=0.5,
+                use_clahe=not cfg.ocr_no_clahe,
+                clahe_brightness_gate=cfg.ocr_clahe_brightness_gate,
+                suppress_highlights=cfg.ocr_suppress_highlights,
+                highlight_threshold=cfg.ocr_highlight_threshold,
+                highlight_inpaint_radius=cfg.ocr_highlight_inpaint_radius,
+                remove_small_bright_specks=cfg.ocr_remove_small_bright_specks,
+                speck_area_px=cfg.ocr_speck_area_px,
+                auto_preproc=cfg.ocr_auto_preproc,
+                auto_color_cast=cfg.ocr_auto_color_cast,
+                gamma_correction=cfg.ocr_gamma_correction,
+                gamma_dark_gate=cfg.ocr_gamma_dark_gate,
+                gamma_value=cfg.ocr_gamma_value,
+                auto_polarity=cfg.ocr_auto_polarity,
+                polarity_dark_mean=cfg.ocr_polarity_dark_mean,
+                polarity_light_mean=cfg.ocr_polarity_light_mean,
+                invert_grayscale=cfg.ocr_invert_grayscale,
+            )
+            runtime.ocr_runner = OCRService(
+                engine_path=cfg.ocr_engine,
+                charset_path=cfg.charset_path,
+                preproc=preproc,
+                logits_layout=cfg.ocr_logits_layout,
+                input_layout=cfg.ocr_input_layout,
+                blank_index=cfg.ocr_blank_index,
+            )
+            runtime.ocr_mode = "trt"
+        except Exception as exc:  # pragma: no cover
+            return None, RuntimeErrorState(f"failed to load OCR TensorRT engine: {exc}")
     else:
         return None, RuntimeErrorState(
             "OCR backend not configured (set ALPR_OCR_ENGINE+ALPR_OCR_CHARSET or ALPR_OCR_ONNX+ALPR_PLATE_CONFIG)"

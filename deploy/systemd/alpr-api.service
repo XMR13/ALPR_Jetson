@@ -4,8 +4,8 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-User=alpr
-WorkingDirectory=/opt/alpr
+User=iks-ai
+WorkingDirectory=/home/iks-ai/Development/ALPR_Jetson
 EnvironmentFile=/etc/alpr/alpr-api.env
 ExecStart=/usr/bin/python3 -m uvicorn src.api_server.server:create_app --factory --host 0.0.0.0 --port 8080 --workers 1
 Restart=always

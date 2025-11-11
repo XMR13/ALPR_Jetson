@@ -90,9 +90,9 @@ When the service starts, it attempts to preload detector and OCR runtimes using
 config/environment variables:
 
 - `ALPR_DET_ENGINE` — Detector TensorRT `.engine` (required).
-- OCR (choose one):
-  - TensorRT: `ALPR_OCR_ENGINE` + `ALPR_OCR_CHARSET` (plus optional dims/layout overrides).
-  - ONNX slot-based: `ALPR_OCR_ONNX` + `ALPR_PLATE_CONFIG` (YAML, see README).
+- OCR (default ONNX):
+  - `ALPR_OCR_ONNX` + `ALPR_PLATE_CONFIG` (YAML, see README) and optional `ALPR_ONNX_PROVIDER`, `ALPR_ONNX_GPU_MEM_MB`.
+  - TensorRT fallback: `ALPR_OCR_ENGINE` + `ALPR_OCR_CHARSET` (plus optional dims/layout overrides).
 - Optional tuning:
   - `ALPR_ONNX_PROVIDER` (`cuda`/`cpu`), `ALPR_ONNX_GPU_MEM_MB`
   - `ALPR_MIN_CONF`, `ALPR_ALLOWED_PREFIXES` (comma-separated)

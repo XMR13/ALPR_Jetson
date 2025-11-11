@@ -10,6 +10,8 @@ uji cepat:
 - **End-to-end JSON** (`e2e-json`): jalankan detektor + OCR untuk satu gambar dan cetak JSON ke stdout (untuk integrasi PHP sementara).
 - **Smoke tests**: `rtsp-smoke` (GStreamer) dan `ds-smoke` (DeepStream).
 
+> Default CLI sekarang otomatis memakai OCR ONNX (`models/ocr/cct_s_v1_global.onnx` + YAML). Tambahkan `--engine ... --charset ...` bila ingin pakai TensorRT OCR.
+
 Catatan workstation (non‑Jetson): jalankan hanya modul yang tidak membutuhkan
 TensorRT/DeepStream. Gunakan OCR ONNX dengan `--onnx-provider cpu` untuk smoke
 lokal. Periksa `docs/SMOKE_GUIDE.md`. Perintah `e2e`, `e2e-json`, dan DS smokes

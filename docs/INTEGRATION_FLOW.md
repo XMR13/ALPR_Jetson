@@ -25,12 +25,13 @@ Run a long‑lived ALPR API service and have PHP call it instead of `exec`.
 
 ### 1) Start the ALPR API (keeps models warm)
 
-Environment (example):
+Environment (example ONNX default):
 
 ```
 export ALPR_DET_ENGINE=models/detector/yolov9-s_plate_fp16.engine
-export ALPR_OCR_ENGINE=models/ocr/ppo_crnn_fp16.engine
-export ALPR_OCR_CHARSET=models/ocr/charset.txt
+export ALPR_OCR_ONNX=models/ocr/cct_s_v1_global.onnx
+export ALPR_PLATE_CONFIG=models/ocr/cct_s_v1_global_plate_config.yaml
+export ALPR_ONNX_PROVIDER=cuda
 export ALPR_SNAPSHOTS_DIR=export/snapshots
 export ALPR_EVENTS_DB=export/events.sqlite
 export ALPR_ALLOWED_PREFIXES=A,B,D,F,E,Z,T
@@ -107,4 +108,3 @@ Example JSON response:
 - Add best‑of‑N burst selection at PHP layer for higher OCR stability.
 - Add confidence thresholds and clear return codes (`no_plate`, `low_conf`).
 - Log lightweight metrics in API (`/metrics`) and feed to your monitoring.
-
