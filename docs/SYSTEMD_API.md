@@ -43,8 +43,24 @@ The unit now defaults to `WorkingDirectory=/home/iks-ai/Development/ALPR_Jetson`
 /usr/bin/python3 -m uvicorn src.api_server.server:create_app --factory --host 0.0.0.0 --port 8080 --workers 1
 ```
 
-Make sure the project lives at `/home/iks-ai/Development/ALPR_Jetson` (or update the unit) and `uvicorn`
-is available for `/usr/bin/python3` (e.g., installed via the project deps).
+Make sure the project lives at `/home/iks-ai/Development/ALPR_Jetson` (or update the unit) and that `uvicorn`
+is available for `/usr/bin/python3` (or point ExecStart to your venv’s python).
+
+If you use a virtualenv in the repo (recommended), adjust ExecStart:
+
+```
+ExecStart=/home/iks-ai/Development/ALPR_Jetson/.venv/bin/python -m uvicorn src.api_server.server:create_app --factory --host 0.0.0.0 --port 8080 --workers 1
+```
+
+And install deps once:
+
+```
+cd /home/iks-ai/Development/ALPR_Jetson
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e . -c constraints-jetson.txt -r requirements-jetson.txt
+deactivate
+```
 
 4) Reload and start
 
@@ -77,3 +93,21 @@ curl -F "image=@/path/to/image.jpg" http://127.0.0.1:8080/v1/alpr
 sudo systemctl stop alpr-api
 sudo systemctl disable alpr-api
 ```
+
+ Hardening notes
+- The unit template sets `ProtectHome=false` because it runs from `/home/...`. If you move the repo to `/opt/alpr`, you can set `ProtectHome=true`.
+- `ProtectSystem=full` makes `/usr` and `/etc` read-only during runtime; keep your write paths under the repo (e.g., `export/`) or `/var`.
+
+Update: venv path and import fixes (Jetson)
+- Set the Python interpreter via the env file at /etc/alpr/alpr-api.env:
+    PYTHON=/home/<user>/Development/ALPR_Jetson/venv/bin/python
+  If you use a dot-venv:
+    PYTHON=/home/<user>/Development/ALPR_Jetson/.venv/bin/python
+- The service ExecStart now imports using api_server.server and adds --app-dir src. This avoids failures when importing src.api_server.server. Example ExecStart used by the unit:
+    ${PYTHON} -m uvicorn api_server.server:create_app --factory --app-dir src --host 0.0.0.0 --port 8080 --workers 1
+- After editing the env file or unit, run:
+    sudo systemctl daemon-reload
+    sudo systemctl restart alpr-api
+- If startup still fails, check logs:
+    systemctl status alpr-api --no-pager
+    journalctl -u alpr-api -b --no-pager | tail -n 120
