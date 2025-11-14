@@ -37,27 +37,29 @@ You can also set `ALPR_POSTPROC_CONFIG` if you want to override post-processing 
 
 3) Point WorkingDirectory and ensure Python
 
-The unit now defaults to `WorkingDirectory=/home/iks-ai/Development/ALPR_Jetson` (user `iks-ai`) and runs:
+The unit defaults to `WorkingDirectory=/home/iks-ai/Development/ALPR_Jetson` (user `iks-ai`).
+
+Set the Python interpreter via `/etc/alpr/alpr-api.env` (the service reads it with `EnvironmentFile`):
 
 ```
-/usr/bin/python3 -m uvicorn src.api_server.server:create_app --factory --host 0.0.0.0 --port 8080 --workers 1
+# If your venv is named venv/ (Jetson case):
+PYTHON=/home/iks-ai/Development/ALPR_Jetson/venv/bin/python
+# If your venv is named .venv/:
+# PYTHON=/home/iks-ai/Development/ALPR_Jetson/.venv/bin/python
 ```
 
-Make sure the project lives at `/home/iks-ai/Development/ALPR_Jetson` (or update the unit) and that `uvicorn`
-is available for `/usr/bin/python3` (or point ExecStart to your venv’s python).
-
-If you use a virtualenv in the repo (recommended), adjust ExecStart:
+The service ExecStart uses that variable and the correct import path with `--app-dir src`:
 
 ```
-ExecStart=/home/iks-ai/Development/ALPR_Jetson/.venv/bin/python -m uvicorn src.api_server.server:create_app --factory --host 0.0.0.0 --port 8080 --workers 1
+ExecStart=${PYTHON} -m uvicorn api_server.server:create_app --factory --app-dir src --host 0.0.0.0 --port 8080 --workers 1
 ```
 
-And install deps once:
+Install deps once into that venv:
 
 ```
 cd /home/iks-ai/Development/ALPR_Jetson
-python3 -m venv .venv
-source .venv/bin/activate
+python3 -m venv venv   # or .venv
+source venv/bin/activate   # or .venv/bin/activate
 pip install -e . -c constraints-jetson.txt -r requirements-jetson.txt
 deactivate
 ```
@@ -67,7 +69,7 @@ deactivate
 ```
 sudo systemctl daemon-reload
 sudo systemctl enable alpr-api
-sudo systemctl start alpr-api
+sudo systemctl restart alpr-api
 ```
 
 5) Check status and logs
@@ -98,16 +100,7 @@ sudo systemctl disable alpr-api
 - The unit template sets `ProtectHome=false` because it runs from `/home/...`. If you move the repo to `/opt/alpr`, you can set `ProtectHome=true`.
 - `ProtectSystem=full` makes `/usr` and `/etc` read-only during runtime; keep your write paths under the repo (e.g., `export/`) or `/var`.
 
-Update: venv path and import fixes (Jetson)
-- Set the Python interpreter via the env file at /etc/alpr/alpr-api.env:
-    PYTHON=/home/<user>/Development/ALPR_Jetson/venv/bin/python
-  If you use a dot-venv:
-    PYTHON=/home/<user>/Development/ALPR_Jetson/.venv/bin/python
-- The service ExecStart now imports using api_server.server and adds --app-dir src. This avoids failures when importing src.api_server.server. Example ExecStart used by the unit:
-    ${PYTHON} -m uvicorn api_server.server:create_app --factory --app-dir src --host 0.0.0.0 --port 8080 --workers 1
-- After editing the env file or unit, run:
-    sudo systemctl daemon-reload
-    sudo systemctl restart alpr-api
-- If startup still fails, check logs:
-    systemctl status alpr-api --no-pager
-    journalctl -u alpr-api -b --no-pager | tail -n 120
+Troubleshooting
+- If startup fails with `ModuleNotFoundError: uvicorn` or `fastapi`, verify `PYTHON` points to your venv and that the venv has those packages.
+- If you see import errors for `src.api_server.server`, ensure the ExecStart matches the template: use `api_server.server:create_app` with `--app-dir src`.
+- If ONNX CUDA provider is unavailable on Jetson, set `ALPR_ONNX_PROVIDER=cpu` in `/etc/alpr/alpr-api.env` to get the service up, then optimize later.

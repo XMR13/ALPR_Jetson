@@ -1,0 +1,12 @@
+# Plate config for Indonesian single-line plates (fast-plate-ocr training).
+# Matches Jetson OCR preprocessing (CLAHE + grayscale) and allows up to 9 chars.
+
+max_plate_slots: 9
+alphabet: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_'
+pad_char: '_'
+img_height: 48
+img_width: 192
+keep_aspect_ratio: false
+interpolation: linear
+image_color_mode: grayscale
+padding_color: 114

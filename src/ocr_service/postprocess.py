@@ -49,8 +49,9 @@ _PREFIX_CONFUSIONS = {
     "0": ("O", "D"),
     "O": ("0", "D"),
     "D": ("O", "0"),
-    "I": ("1", "L"),
+    "I": ("1", "L", "T"),
     "1": ("I", "L"),
+    "T": ("Y", "I"),
     "L": ("I", "1"),
     "M": ("N",),
     "N": ("M",),
@@ -76,10 +77,10 @@ _DIGIT_CONFUSIONS = {
 
 _SUFFIX_CONFUSIONS = {
     "Y": ("T", "V"),
-    "T": ("Y",),
+    "T": ("Y", "I"),
     "V": ("Y", "U"),
     "U": ("V", "O"),
-    "O": ("D", "0"),
+    "O": ("D", "0", "U"),
     "D": ("O", "0", "C"),
     "C": ("G", "O", "E"),
     "E": ("C", "F"),
@@ -89,7 +90,7 @@ _SUFFIX_CONFUSIONS = {
     "B": ("R",),
     "P": ("R", "F"),
     "J": ("I",),
-    "I": ("1",),
+    "I": ("1", "T"),
     "S": ("5",),
     "5": ("S",),
 }
@@ -151,6 +152,8 @@ _PENALTY_TRIGGER = 0.5
 class PostprocessTuning:
     suffix_len_lt3_penalty: float = 0.2
     suffix_last_letter_penalty: Dict[str, float] = field(
+        # Penalize ambiguous short suffixes ending in I/U by default.
+        # Site-specific biases (e.g., O vs U) should be configured via YAML.
         default_factory=lambda: {"I": 0.55, "U": 0.55}
     )
     suffix_penalty_map: Dict[str, float] = field(

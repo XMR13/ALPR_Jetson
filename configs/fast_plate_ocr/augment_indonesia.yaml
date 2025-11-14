@@ -1,0 +1,107 @@
+__version__: 1.4.11
+transform:
+  __class_fullname__: albumentations.core.composition.Compose
+  additional_targets: {}
+  bbox_params: null
+  keypoint_params: null
+  p: 1.0
+  transforms:
+    - __class_fullname__: albumentations.augmentations.transforms.CLAHE
+      clip_limit: 2.0
+      p: 0.6
+      tile_grid_size:
+        - 8
+        - 8
+    - __class_fullname__: albumentations.augmentations.transforms.RandomBrightnessContrast
+      brightness_limit:
+        - -0.25
+        - 0.35
+      contrast_limit:
+        - -0.2
+        - 0.25
+      p: 0.9
+    - __class_fullname__: albumentations.augmentations.transforms.RandomGamma
+      gamma_limit:
+        - 80
+        - 120
+      p: 0.35
+    - __class_fullname__: albumentations.augmentations.transforms.GaussNoise
+      p: 0.25
+    - __class_fullname__: albumentations.core.composition.OneOf
+      p: 0.4
+      transforms:
+        - __class_fullname__: albumentations.augmentations.transforms.MotionBlur
+          allow_shifted: true
+          blur_limit:
+            - 3
+            - 7
+          p: 0.5
+        - __class_fullname__: albumentations.augmentations.transforms.GaussianBlur
+          blur_limit:
+            - 3
+            - 5
+          p: 0.3
+        - __class_fullname__: albumentations.augmentations.transforms.MedianBlur
+          blur_limit: 5
+          p: 0.2
+    - __class_fullname__: albumentations.core.composition.OneOf
+      p: 0.35
+      transforms:
+        - __class_fullname__: albumentations.augmentations.dropout.coarse_dropout.CoarseDropout
+          fill_value: 0
+          max_holes: 4
+          max_height: 6
+          max_width: 18
+          min_holes: 1
+          min_height: 3
+          min_width: 6
+          p: 0.5
+        - __class_fullname__: albumentations.augmentations.dropout.coarse_dropout.CoarseDropout
+          fill_value: 255
+          max_holes: 2
+          max_height: 10
+          max_width: 20
+          min_holes: 1
+          min_height: 4
+          min_width: 8
+          p: 0.5
+    - __class_fullname__: albumentations.core.composition.OneOf
+      p: 0.4
+      transforms:
+        - __class_fullname__: albumentations.augmentations.geometric.transforms.Perspective
+          fit_output: false
+          interpolation: 1
+          keep_size: true
+          mask_pad_val: 0
+          pad_mode: 0
+          pad_val: 0
+          p: 0.6
+          scale:
+            - 0.02
+            - 0.05
+        - __class_fullname__: albumentations.augmentations.geometric.transforms.ShiftScaleRotate
+          border_mode: 0
+          p: 0.4
+          rotate_limit:
+            - -3
+            - 3
+          scale_limit:
+            - -0.05
+            - 0.08
+          shift_limit_x:
+            - -0.05
+            - 0.05
+          shift_limit_y:
+            - -0.05
+            - 0.05
+          value: 0
+    - __class_fullname__: albumentations.augmentations.transforms.Downscale
+      interpolation: 1
+      p: 0.25
+      scale_max: 0.95
+      scale_min: 0.75
+    - __class_fullname__: albumentations.augmentations.transforms.ImageCompression
+      compression_type: 0
+      p: 0.2
+      quality_lower: 45
+      quality_upper: 85
