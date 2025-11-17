@@ -50,6 +50,13 @@ def test_postprocess_indonesia_suffix_confusions():
     assert text3 == "A 9513 S"
 
 
+def test_postprocess_indonesia_tail_u_not_flipped_to_o():
+    # Regression: a valid suffix ending in U should not be "corrected" to O.
+    text, valid = postprocess_indonesia("B9048ZU", allowed_prefix=["B"])
+    assert valid is True
+    assert text == "B 9048 ZU"
+
+
 def test_majority_vote_prefers_frequent_then_conf():
     mv = MajorityVote(window=8)
     mv.add("B 9418 QW", 0.90)
@@ -91,3 +98,11 @@ def test_postprocess_indonesia_respects_custom_tuning():
     # With the custom config, prefer DG to demonstrate configurability
     text_custom, _ = postprocess_indonesia("R9105DC", allowed_prefix=["B"], tuning=custom)
     assert text_custom != "B 9105 PDC"
+
+
+def test_postprocess_indonesia_yaml_prefers_zu_over_zo():
+    # Ensure the shipped YAML config biases ZO -> ZU in the suffix.
+    cfg = load_postprocess_config("configs/ocr/postproc_indonesia.yaml")
+    text, valid = postprocess_indonesia("B9048ZO", allowed_prefix=["B"], tuning=cfg)
+    assert valid is True
+    assert text == "B 9048 ZU"

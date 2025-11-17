@@ -386,10 +386,9 @@ def _prepare_image(trt_model, img0):
 def load_engine(engine_path, print_plugins=False):
     return TRTModule(engine_path, print_plugins=print_plugins)
 
-def infer_image(trt_model, image_path, conf=0.5, iou=0.45):
-    img0 = cv2.imread(image_path)
+def infer_image_array(trt_model, img0, conf=0.5, iou=0.45):
     if img0 is None:
-        raise FileNotFoundError(image_path)
+        raise ValueError("image array is None")
     in_idx, inp, input_hw, ratio_pad = _prepare_image(trt_model, img0)
     outputs = trt_model.infer({in_idx: inp})
     dets = decode_trt_detections(
@@ -401,6 +400,14 @@ def infer_image(trt_model, image_path, conf=0.5, iou=0.45):
         iou_thres=iou,
         names=None,
     )
+    return dets
+
+
+def infer_image(trt_model, image_path, conf=0.5, iou=0.45):
+    img0 = cv2.imread(image_path)
+    if img0 is None:
+        raise FileNotFoundError(image_path)
+    dets = infer_image_array(trt_model, img0, conf=conf, iou=iou)
     return img0, dets
 
 # ----------------- Main -----------------

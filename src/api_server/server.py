@@ -59,6 +59,7 @@ except Exception:  # pragma: no cover
 
 from .db import EventRecord, EventStore
 from pipeline.track_aggregator import TrackAggregator
+from pipeline.alpr_runner import run_e2e_array
 
 try:
     from inference.yolov9_trt import (
@@ -950,103 +951,50 @@ def create_app(cfg: Optional[AppConfig] = None) -> "Optional[FastAPI]":
         cam_id = camera_id or state.config.default_camera_id
         req_id = request_id or f"req-{int(time.time() * 1000)}"
 
-        start_det = time.time()
+        backend_mode = state.runtime.ocr_mode or "onnx"
         try:
-            idx, inp, input_hw, ratio_pad = _prepare_image(state.runtime.det_model, frame)  # type: ignore[attr-defined]
-            outputs = state.runtime.det_model.infer({idx: inp})  # type: ignore[arg-type]
-            detections = decode_trt_detections(
-                outputs,
-                img0_shape=frame.shape,
-                input_hw=input_hw,
-                ratio_pad=ratio_pad,
-                conf_thres=min_conf,
-                iou_thres=0.45,
+            result = run_e2e_array(
+                frame,
+                det_engine=state.runtime.det_model,
+                ocr_runner=state.runtime.ocr_runner,
+                backend=backend_mode,
+                conf=min_conf,
+                iou=0.45,
+                postproc="indonesia",
+                allowed_prefix=state.config.allowed_prefixes,
+                postprocess_fn=postprocess_indonesia,
+                min_plate_h=min_plate_h,
+                min_ar=min_ar,
+                max_ar=max_ar,
+                debug_crops=False,
+                accept_all=bool(accept_all),
+                topk=0,
             )
         except Exception as exc:
-            raise HTTPException(status_code=500, detail=f"detection failed: {exc}") from exc
-        det_ms = (time.time() - start_det) * 1000.0
+            raise HTTPException(status_code=500, detail=f"pipeline failed: {exc}") from exc
+
+        plates = result.get("plates", [])
+        latency = result.get("latency_ms", {})
+        det_ms = float(latency.get("det", 0.0))
+        ocr_ms = float(latency.get("ocr", 0.0))
+        total_ms = det_ms + ocr_ms
+        status_label = str(result.get("status") or ("ok" if plates else "no_plate"))
 
         crops: List[Any] = []
-        det_meta: List[Tuple[Tuple[int, int, int, int], float, int]] = []
-        h, w = frame.shape[:2]
-        # Heuristics from plan.md: ignore tiny or implausible aspect crops
-        MIN_H = int(min_plate_h)
-        AR_MIN, AR_MAX = float(min_ar), float(max_ar)
-        for bbox, score, cls in detections:
-            # Mirror CLI rounding: floor lower bounds, ceil upper bounds
-            x1 = int(math.floor(bbox[0]))
-            y1 = int(math.floor(bbox[1]))
-            x2 = int(math.ceil(bbox[2]))
-            y2 = int(math.ceil(bbox[3]))
-            x1 = max(0, min(x1, w - 1))
-            x2 = max(0, min(x2, w - 1))
-            y1 = max(0, min(y1, h - 1))
-            y2 = max(0, min(y2, h - 1))
-            if x2 <= x1 or y2 <= y1 or score < min_conf:
-                continue
-            crop = frame[y1:y2, x1:x2]
-            if crop.size == 0:
-                continue
-            # gate by height and aspect ratio to reduce garbage OCRs (unless accept_all)
-            if not accept_all:
-                hbox = max(1, y2 - y1)
-                wbox = max(1, x2 - x1)
-                ar = float(wbox) / float(hbox)
-                if (hbox < MIN_H) or (ar < AR_MIN) or (ar > AR_MAX):
+        if plates:
+            h, w = frame.shape[:2]
+            for det in plates:
+                x1, y1, x2, y2 = [int(v) for v in det.get("bbox", [0, 0, 0, 0])]
+                x1 = max(0, min(x1, w - 1))
+                x2 = max(0, min(max(x2, x1 + 1), w))
+                y1 = max(0, min(y1, h - 1))
+                y2 = max(0, min(max(y2, y1 + 1), h))
+                if x2 <= x1 or y2 <= y1:
+                    crops.append(None)
                     continue
-            crops.append(crop)
-            det_meta.append(((x1, y1, x2, y2), float(score), int(cls)))
-
-        texts: List[str] = []
-        char_confs: List[List[float]] = []
-        ocr_ms = 0.0
-        if crops and state.runtime.ocr_runner is not None:
-            start_ocr = time.time()
-            runner = state.runtime.ocr_runner
-            try:
-                if state.runtime.ocr_mode == "onnx":
-                    res = runner.infer_batch(crops, return_confidence=True)  # type: ignore[attr-defined]
-                    if isinstance(res, tuple) and len(res) == 2:
-                        texts, char_confs = res  # type: ignore[misc]
-                    else:
-                        texts = list(res)  # type: ignore[arg-type]
-                else:
-                    texts = runner.infer_batch(crops)  # type: ignore[attr-defined]
-            except Exception as exc:
-                raise HTTPException(status_code=500, detail=f"OCR failed: {exc}") from exc
-            ocr_ms = (time.time() - start_ocr) * 1000.0
-
-        allowed = state.config.allowed_prefixes or None
-        plates: List[Dict[str, Any]] = []
-        for idx, ((x1, y1, x2, y2), det_conf, cls) in enumerate(det_meta):
-            raw_text = texts[idx] if idx < len(texts) else ""
-            char_conf = char_confs[idx] if idx < len(char_confs) else []
-            norm_text, is_valid = postprocess_indonesia(
-                raw_text,
-                allowed_prefix=allowed,
-                tuning=state.postproc_tuning,  # type: ignore[arg-type]
-                char_confs=char_conf,
-                strict=bool(state.config.postproc_strict),
-            )
-            plates.append(
-                {
-                    "bbox": [int(x1), int(y1), int(x2), int(y2)],
-                    "det_conf": float(det_conf),
-                    "ocr_raw": raw_text,
-                    "text": norm_text,
-                    "valid": bool(is_valid),
-                    "plate_conf": _compute_plate_conf(det_conf, char_conf),
-                    "char_confs": [float(c) for c in char_conf],
-                    "class_id": int(cls),
-                    "track_id": None,
-                    "frame_id": None,
-                }
-            )
-
-        total_ms = det_ms + ocr_ms
+                crops.append(frame[y1:y2, x1:x2].copy())
         state.total_requests += 1
         state.last_latency_ms = total_ms
-        status_label = "ok" if plates else "no_plate"
         state.last_status_ok = 1 if status_label == "ok" else 0
         state.last_frame_ts = datetime.now(timezone.utc).isoformat()
 

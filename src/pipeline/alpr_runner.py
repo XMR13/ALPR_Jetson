@@ -18,8 +18,8 @@ def plate_conf(det_conf: float, char_confs: List[float]) -> float:
     return float(det_conf) * float(avg_char)
 
 
-def run_e2e_single(
-    image_path: str,
+def run_e2e_array(
+    image_bgr: Any,
     *,
     det_engine,
     ocr_runner,
@@ -40,11 +40,11 @@ def run_e2e_single(
     from typing import Tuple
 
     import cv2  # type: ignore
-    from inference.yolov9_trt import infer_image  # type: ignore
+    from inference.yolov9_trt import infer_image_array  # type: ignore
 
-    img_path = str(Path(image_path))
+    img0 = image_bgr
     t0 = time.time()
-    img0, dets = infer_image(det_engine, img_path, conf=conf, iou=iou)
+    dets = infer_image_array(det_engine, img0, conf=conf, iou=iou)
     det_ms = (time.time() - t0) * 1000.0
 
     h, w = img0.shape[:2]
@@ -143,3 +143,45 @@ def run_e2e_single(
         }
     return out
 
+
+def run_e2e_single(
+    image_path: str,
+    *,
+    det_engine,
+    ocr_runner,
+    backend: str,
+    conf: float,
+    iou: float,
+    postproc: str,
+    allowed_prefix: List[str],
+    postprocess_fn=None,
+    min_plate_h: int = 28,
+    min_ar: float = 1.5,
+    max_ar: float = 5.0,
+    debug_crops: bool = False,
+    accept_all: bool = False,
+    topk: int = 1,
+) -> Dict[str, Any]:
+    import cv2  # type: ignore
+
+    img_path = str(Path(image_path))
+    img0 = cv2.imread(img_path)
+    if img0 is None:
+        raise FileNotFoundError(img_path)
+    return run_e2e_array(
+        img0,
+        det_engine=det_engine,
+        ocr_runner=ocr_runner,
+        backend=backend,
+        conf=conf,
+        iou=iou,
+        postproc=postproc,
+        allowed_prefix=allowed_prefix,
+        postprocess_fn=postprocess_fn,
+        min_plate_h=min_plate_h,
+        min_ar=min_ar,
+        max_ar=max_ar,
+        debug_crops=debug_crops,
+        accept_all=accept_all,
+        topk=topk,
+    )

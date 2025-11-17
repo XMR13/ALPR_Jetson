@@ -8,6 +8,7 @@ suffix_penalty_map:
   DK: 0.8
   DG: 0.35
   DF: 0.35
+  VI: 0.55   # encourage completing to VIN
   ZO: 0.6   # discourage O at tail when Z precedes (prefer ZU)
 suffix_contains_penalty:
   TT: 0.6

@@ -49,9 +49,11 @@ _PREFIX_CONFUSIONS = {
     "0": ("O", "D"),
     "O": ("0", "D"),
     "D": ("O", "0"),
-    "I": ("1", "L", "T"),
+    # Keep I↔1/L for prefix, but avoid I↔T which was over-aggressive.
+    "I": ("1", "L"),
     "1": ("I", "L"),
-    "T": ("Y", "I"),
+    # Allow T→Y (common) but not T→I by default.
+    "T": ("Y",),
     "L": ("I", "1"),
     "M": ("N",),
     "N": ("M",),
@@ -77,7 +79,8 @@ _DIGIT_CONFUSIONS = {
 
 _SUFFIX_CONFUSIONS = {
     "Y": ("T", "V"),
-    "T": ("Y", "I"),
+    # Favor T→Y but avoid T→I which caused I/T flips in suffix.
+    "T": ("Y",),
     "V": ("Y", "U"),
     "U": ("V", "O"),
     "O": ("D", "0", "U"),
@@ -90,7 +93,8 @@ _SUFFIX_CONFUSIONS = {
     "B": ("R",),
     "P": ("R", "F"),
     "J": ("I",),
-    "I": ("1", "T"),
+    # Do not substitute I inside the suffix region by default; this avoids I→T flips.
+    "I": (),
     "S": ("5",),
     "5": ("S",),
 }
@@ -152,9 +156,9 @@ _PENALTY_TRIGGER = 0.5
 class PostprocessTuning:
     suffix_len_lt3_penalty: float = 0.2
     suffix_last_letter_penalty: Dict[str, float] = field(
-        # Penalize ambiguous short suffixes ending in I/U by default.
-        # Site-specific biases (e.g., O vs U) should be configured via YAML.
-        default_factory=lambda: {"I": 0.55, "U": 0.55}
+        # By default, do not penalize specific tail letters.
+        # Site-specific biases (e.g., tail I/U handling) should be configured via YAML.
+        default_factory=dict
     )
     suffix_penalty_map: Dict[str, float] = field(
         default_factory=lambda: {
@@ -164,6 +168,8 @@ class PostprocessTuning:
             "DK": 0.8,
             "DG": 0.35,
             "DF": 0.35,
+            # Encourage completing VI -> VIN by penalizing the short form slightly.
+            "VI": 0.55,
         }
     )
     suffix_contains_penalty: Dict[str, float] = field(
