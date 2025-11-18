@@ -6,11 +6,11 @@ Wants=network-online.target
 [Service]
 User=iks-ai
 WorkingDirectory=/home/iks-ai/Development/ALPR_Jetson
-Environment=PYTHON=/usr/bin/python3
 EnvironmentFile=-/etc/alpr/alpr-api.env
 # Note: use api_server.server (not src.api_server.server) and add --app-dir src
 # so uvicorn can import modules when WorkingDirectory is the repo root.
-ExecStart= -m uvicorn api_server.server:create_app --factory --app-dir src --host 0.0.0.0 --port 8080 --workers 1
+# Default to system Python; override ExecStart on the target if you use a venv.
+ExecStart=/usr/bin/python3 -m uvicorn api_server.server:create_app --factory --app-dir src --host 0.0.0.0 --port 8080 --workers 1
 Restart=always
 RestartSec=2
 

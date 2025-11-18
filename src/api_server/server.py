@@ -59,7 +59,7 @@ except Exception:  # pragma: no cover
 
 from .db import EventRecord, EventStore
 from pipeline.track_aggregator import TrackAggregator
-from pipeline.alpr_runner import run_e2e_array
+from pipeline.alpr_runner import run_e2e_array, run_e2e_single
 
 try:
     from inference.yolov9_trt import (
@@ -336,11 +336,9 @@ def _initialize_runtime(cfg: AppConfig) -> Tuple[Optional[_Runtime], Optional[Ru
         return None, RuntimeErrorState("ALPR_DET_ENGINE not configured")
 
     runtime = _Runtime()
-    try:
-        runtime.det_model = load_engine(cfg.det_engine, print_plugins=False)  # type: ignore[arg-type]
-    except Exception as exc:  # pragma: no cover
-        return None, RuntimeErrorState(f"failed to load detector engine: {exc}")
-
+    # Important: initialize OCR first, then the detector TensorRT engine.
+    # This matches tools/alpr_text_only.py / e2e-json behavior and avoids
+    # CUDA primary-context conflicts that can corrupt long-lived TRT handles.
     if cfg.ocr_onnx and cfg.plate_config:
         if yaml is None:
             return None, RuntimeErrorState("pyyaml is required for ONNX OCR plate config")
@@ -429,6 +427,13 @@ def _initialize_runtime(cfg: AppConfig) -> Tuple[Optional[_Runtime], Optional[Ru
         return None, RuntimeErrorState(
             "OCR backend not configured (set ALPR_OCR_ENGINE+ALPR_OCR_CHARSET or ALPR_OCR_ONNX+ALPR_PLATE_CONFIG)"
         )
+
+    # With OCR initialized, load the detector engine so it binds to the
+    # already-established CUDA context (especially important for ONNX OCR).
+    try:
+        runtime.det_model = load_engine(cfg.det_engine, print_plugins=False)  # type: ignore[arg-type]
+    except Exception as exc:  # pragma: no cover
+        return None, RuntimeErrorState(f"failed to load detector engine: {exc}")
 
     return runtime, None
 
@@ -943,6 +948,7 @@ def create_app(cfg: Optional[AppConfig] = None) -> "Optional[FastAPI]":
             raise HTTPException(status_code=400, detail="empty image payload")
         if len(data) > state.config.max_upload_bytes:
             raise HTTPException(status_code=413, detail="image exceeds size limit")
+        # Decode frame for snapshot/crop extraction
         buf = np.frombuffer(data, dtype=np.uint8)
         frame = cv2.imdecode(buf, cv2.IMREAD_COLOR)
         if frame is None:
@@ -953,23 +959,43 @@ def create_app(cfg: Optional[AppConfig] = None) -> "Optional[FastAPI]":
 
         backend_mode = state.runtime.ocr_mode or "onnx"
         try:
-            result = run_e2e_array(
-                frame,
-                det_engine=state.runtime.det_model,
-                ocr_runner=state.runtime.ocr_runner,
-                backend=backend_mode,
-                conf=min_conf,
-                iou=0.45,
-                postproc="indonesia",
-                allowed_prefix=state.config.allowed_prefixes,
-                postprocess_fn=postprocess_indonesia,
-                min_plate_h=min_plate_h,
-                min_ar=min_ar,
-                max_ar=max_ar,
-                debug_crops=False,
-                accept_all=bool(accept_all),
-                topk=0,
-            )
+            # Reuse the warm detector from runtime, mirroring CLI behavior
+            # (ONNX OCR initialized before TRT engine).
+            det_model = state.runtime.det_model
+            if det_model is None:
+                raise RuntimeError("detector runtime not initialized")
+
+            # Write payload to a temporary file and reuse the same path-based
+            # runner as tools/alpr_text_only.py for strict equivalence.
+            import tempfile
+            import os as _os
+
+            with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
+                tmp.write(data)
+                tmp_path = tmp.name
+            try:
+                result = run_e2e_single(
+                    tmp_path,
+                    det_engine=det_model,
+                    ocr_runner=state.runtime.ocr_runner,
+                    backend=backend_mode,
+                    conf=min_conf,
+                    iou=0.45,
+                    postproc="indonesia",
+                    allowed_prefix=state.config.allowed_prefixes,
+                    postprocess_fn=postprocess_indonesia,
+                    min_plate_h=min_plate_h,
+                    min_ar=min_ar,
+                    max_ar=max_ar,
+                    debug_crops=False,
+                    accept_all=True,
+                    topk=1,
+                )
+            finally:
+                try:
+                    _os.unlink(tmp_path)
+                except Exception:
+                    pass
         except Exception as exc:
             raise HTTPException(status_code=500, detail=f"pipeline failed: {exc}") from exc
 
