@@ -168,8 +168,8 @@ class PostprocessTuning:
             "DK": 0.8,
             "DG": 0.35,
             "DF": 0.35,
-            # Encourage completing VI -> VIN by penalizing the short form slightly.
-            "VI": 0.55,
+            # No bias pushing VI -> VIN; keep neutral for two-letter suffixes.
+            "VI": 0.0,
         }
     )
     suffix_contains_penalty: Dict[str, float] = field(
@@ -185,7 +185,8 @@ class PostprocessTuning:
     suffix_vowel_pair_penalty: float = 0.2
     # Disable hard collapse of same-letter suffixes; rely on confidence/penalties instead.
     duplicate_collapse_min_len: int = 4
-    insert_bias_vi_to_vin: float = 0.05
+    # Disable the VI -> VIN insertion bias to avoid over-completing valid "VI" tails.
+    insert_bias_vi_to_vin: float = 0.0
     insert_bias_pdc: float = 0.25
     # Confidence-aware truncation/gating for suffix tails (enabled by default)
     # If > 0, require the last suffix character confidence to meet this threshold
