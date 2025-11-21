@@ -183,17 +183,18 @@ class PostprocessTuning:
     )
     suffix_duplicate_penalty: float = 1.0
     suffix_vowel_pair_penalty: float = 0.2
-    duplicate_collapse_min_len: int = 2
+    # Disable hard collapse of same-letter suffixes; rely on confidence/penalties instead.
+    duplicate_collapse_min_len: int = 4
     insert_bias_vi_to_vin: float = 0.05
     insert_bias_pdc: float = 0.25
-    # New: confidence-aware truncation/gating (disabled by default)
+    # Confidence-aware truncation/gating for suffix tails (enabled by default)
     # If > 0, require the last suffix character confidence to meet this threshold
-    # or drop it (plates allow 0–3 suffix letters). Useful for U↔O ambiguity at tail.
-    last_char_min_conf: float = 0.0
+    # or drop it (plates allow 0–3 suffix letters). Helps avoid doubled tails.
+    last_char_min_conf: float = 0.35
     # If true, allow dropping low-confidence tail characters in suffix
-    truncate_ambiguous_suffix: bool = False
+    truncate_ambiguous_suffix: bool = True
     # Optional global minimum confidence for suffix characters; 0 disables
-    min_suffix_char_conf: float = 0.0
+    min_suffix_char_conf: float = 0.25
 
 
 DEFAULT_TUNING = PostprocessTuning()

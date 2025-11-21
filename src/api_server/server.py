@@ -218,7 +218,79 @@ class AppConfig:
     min_plate_h: int = 28
     min_ar: float = 1.5
     max_ar: float = 5.0
-    allowed_prefixes: List[str] = field(default_factory=lambda: ["A", "B", "D", "F", "E", "Z", "T"])
+    # Indonesian vehicle plate province/region codes (1–2 letters). This is
+    # intentionally broad so valid prefixes are not coerced to the wrong
+    # region during post-processing.
+    allowed_prefixes: List[str] = field(
+        default_factory=lambda: [
+            # Java & Bali
+            "A",
+            "B",
+            "D",
+            "E",
+            "F",
+            "T",
+            "Z",
+            "G",
+            "H",
+            "K",
+            "L",
+            "M",
+            "N",
+            "P",
+            "S",
+            "W",
+            "DK",  # Bali
+            "AB",  # DIY Yogyakarta
+            "AA",  # Magelang
+            "AD",  # Surakarta
+            "AE",  # Madiun
+            "AG",  # Kediri
+            "R",   # Banyumas (Cilacap/Purwokerto)
+
+            # Sumatra
+            "BA",  # Sumbar
+            "BB",  # Bengkulu
+            "BD",  # Bengkulu (legacy code overlaps)
+            "BE",  # Lampung
+            "BG",  # Sumsel
+            "BH",  # Jambi
+            "BK",  # Sumut
+            "BL",  # Aceh
+            "BM",  # Riau
+            "BN",  # Kep. Bangka Belitung
+            "BP",  # Kep. Riau
+
+            # Kalimantan
+            "DA",  # Kalsel
+            "KB",  # Kalbar
+            "KH",  # Kalteng
+            "KT",  # Kaltim
+            "KU",  # Kaltara
+
+            # Sulawesi
+            "DB",  # Sulut
+            "DC",  # Gorontalo
+            "DD",  # Sulsel
+            "DL",  # Sulteng (legacy)
+            "DM",  # Sulteng (alt)
+            "DN",  # Sulteng (current)
+            "DT",  # Sultra
+            "DP",  # Sulbar
+
+            # Nusa Tenggara
+            "DR",  # NTB
+            "EA",  # NTT (Sumbawa)
+            "EB",  # NTT (Flores)
+            "ED",  # NTT (Timor)
+
+            # Maluku & Papua
+            "DE",  # Maluku
+            "DG",  # Malut
+            "PA",  # Papua
+            "PB",  # Papua Barat
+        ]
+    )
     events_db: str = "export/events.sqlite"
     snapshots_dir: str = "export/snapshots"
     snapshot_quality: int = 90
