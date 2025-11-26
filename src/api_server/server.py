@@ -20,10 +20,11 @@ import math
 import os
 import re
 import time
+from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, Union
+from typing import Any, Deque, Dict, Iterable, List, Optional, Sequence, Tuple, Union
 
 try:  # Web framework
     from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request, UploadFile, WebSocket, Body
@@ -142,6 +143,15 @@ def _parse_ts_iso(ts: Optional[str]) -> datetime:
         except Exception:
             pass
     return datetime.now(timezone.utc)
+
+
+def _percentile(window: Deque[float], pct: float) -> float:
+    """Compute a percentile from a bounded latency window (returns 0.0 if empty)."""
+    if not window:
+        return 0.0
+    arr = sorted(window)
+    k = max(0, min(len(arr) - 1, int(round((pct / 100.0) * (len(arr) - 1)))))
+    return float(arr[k])
 
 
 def _generate_snapshot_path(base: Path, camera_id: str, dt: datetime, request_id: str, sequence_id: int, track_id: Optional[int]) -> Path:
@@ -527,6 +537,14 @@ class _State:
     total_requests: int = 0
     last_latency_ms: float = 0.0
     last_status_ok: int = 0
+    latency_sum_det_ms: float = 0.0
+    latency_sum_ocr_ms: float = 0.0
+    latency_sum_total_ms: float = 0.0
+    latency_count: int = 0
+    latency_window_det: Deque[float] = field(default_factory=lambda: deque(maxlen=200))
+    latency_window_ocr: Deque[float] = field(default_factory=lambda: deque(maxlen=200))
+    latency_window_total: Deque[float] = field(default_factory=lambda: deque(maxlen=200))
+    status_counts: Dict[str, int] = field(default_factory=lambda: defaultdict(int))
     runtime: Optional[_Runtime] = None
     runtime_error: Optional[RuntimeErrorState] = None
     config: AppConfig = field(default_factory=AppConfig)
@@ -797,6 +815,14 @@ def create_app(cfg: Optional[AppConfig] = None) -> "Optional[FastAPI]":
 
     @app.get("/metrics", response_class=PlainTextResponse)
     def metrics():  # type: ignore[no-redef]
+        def _lat_lines(stage: str, window: Deque[float], total: float) -> List[str]:
+            return [
+                f'alpr_latency_ms_sum{{stage="{stage}"}} {total}',
+                f'alpr_latency_ms_count{{stage="{stage}"}} {state.latency_count}',
+                f'alpr_latency_ms_p50{{stage="{stage}"}} {_percentile(window, 50)}',
+                f'alpr_latency_ms_p95{{stage="{stage}"}} {_percentile(window, 95)}',
+            ]
+
         lines = [
             "# HELP alpr_fps Current estimated frames per second",
             "# TYPE alpr_fps gauge",
@@ -816,9 +842,16 @@ def create_app(cfg: Optional[AppConfig] = None) -> "Optional[FastAPI]":
             "# HELP alpr_gpu_util GPU utilization percent",
             "# TYPE alpr_gpu_util gauge",
             f"alpr_gpu_util {state.gpu_util}",
-            "# HELP alpr_requests_total Total synchronous /v1/alpr requests",
+            "# HELP alpr_requests_total Total synchronous /v1/alpr requests by status",
             "# TYPE alpr_requests_total counter",
-            f"alpr_requests_total {state.total_requests}",
+        ]
+
+        for status, count in sorted(state.status_counts.items()):
+            lines.append(f'alpr_requests_total{{status="{status}"}} {count}')
+        if not state.status_counts:
+            lines.append('alpr_requests_total{status="none"} 0')
+
+        lines += [
             "# HELP alpr_last_latency_ms Last synchronous /v1/alpr total latency in ms",
             "# TYPE alpr_last_latency_ms gauge",
             f"alpr_last_latency_ms {state.last_latency_ms}",
@@ -831,7 +864,14 @@ def create_app(cfg: Optional[AppConfig] = None) -> "Optional[FastAPI]":
             "# HELP alpr_events_failures_total Event persistence failures",
             "# TYPE alpr_events_failures_total counter",
             f"alpr_events_failures_total {state.events_failures}",
+            "# HELP alpr_latency_ms_sum Sum of /v1/alpr latencies by stage (ms)",
+            "# TYPE alpr_latency_ms_sum counter",
         ]
+
+        lines += _lat_lines("det", state.latency_window_det, state.latency_sum_det_ms)
+        lines += _lat_lines("ocr", state.latency_window_ocr, state.latency_sum_ocr_ms)
+        lines += _lat_lines("total", state.latency_window_total, state.latency_sum_total_ms)
+
         return "\n".join(lines) + "\n"
 
     @app.post("/v1/config/preproc")
@@ -1092,6 +1132,14 @@ def create_app(cfg: Optional[AppConfig] = None) -> "Optional[FastAPI]":
                     continue
                 crops.append(frame[y1:y2, x1:x2].copy())
         state.total_requests += 1
+        state.status_counts[status_label] += 1
+        state.latency_sum_det_ms += det_ms
+        state.latency_sum_ocr_ms += ocr_ms
+        state.latency_sum_total_ms += total_ms
+        state.latency_count += 1
+        state.latency_window_det.append(det_ms)
+        state.latency_window_ocr.append(ocr_ms)
+        state.latency_window_total.append(total_ms)
         state.last_latency_ms = total_ms
         state.last_status_ok = 1 if status_label == "ok" else 0
         state.last_frame_ts = datetime.now(timezone.utc).isoformat()
